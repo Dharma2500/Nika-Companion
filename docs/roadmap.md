@@ -8,14 +8,16 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Add versioned SQLite schema
 - [x] Add append-only local event journal
 - [x] Keep local runtime data outside Git
-- [ ] Verify first GitHub Actions run
+- [ ] Verify first successful GitHub Actions run
 
 ## Phase 1: reliable local agent
 
+- [x] Structured storage foundation and schema migration rollback test
+- [x] Consistent SQLite backup creation, verification and retention
+- [ ] Restore workflow with safe shutdown protection
 - [ ] Structured logging with secret redaction
 - [ ] Process lifecycle, graceful shutdown and health endpoint
-- [ ] Backup, restore and integrity verification
-- [ ] Database migration tests and crash/restart tests
+- [ ] Crash/restart tests
 - [ ] Configuration validation and diagnostics
 
 ## Phase 2: Minecraft client integration
