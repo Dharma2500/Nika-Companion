@@ -32,7 +32,7 @@ _SENSITIVE_KEY_PARTS = (
 )
 
 _SECRET_ASSIGNMENT = re.compile(
-    r"""(?ix)
+    r"""(?isx)
     (?P<prefix>
         ["']?
         (?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|
@@ -54,6 +54,8 @@ _KNOWN_TOKEN_FORMATS = (
     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
     re.compile(r"\bAIza[A-Za-z0-9_-]{30,}\b"),
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    re.compile(r"\b[0-9]{8,10}:[A-Za-z0-9_-]{30,}\b"),
 )
 
 _STANDARD_RECORD_FIELDS = frozenset(
@@ -149,7 +151,12 @@ def setup_logging(
         raise ValueError("max_bytes must be at least 1")
     if backup_count < 0:
         raise ValueError("backup_count must not be negative")
-    if Path(filename).name != filename or not filename.endswith(".jsonl"):
+    if (
+        Path(filename).name != filename
+        or "/" in filename
+        or "\\" in filename
+        or not filename.endswith(".jsonl")
+    ):
         raise ValueError("filename must be a simple .jsonl file name")
 
     resolved = settings or Settings.from_env()
