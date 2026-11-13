@@ -142,6 +142,8 @@ def test_startup_lock_is_exclusive_and_released_after_process_exit(
 
     descriptor = runtime._acquire_start_lock(settings)
     runtime._release_start_lock(descriptor)
+
+
 def test_start_refuses_to_replace_invalid_status_file(tmp_path: Path) -> None:
     settings = Settings(
         data_dir=tmp_path / "nika-data",
@@ -178,3 +180,27 @@ def test_start_refuses_to_replace_status_for_unresponsive_live_process(
     with pytest.raises(RuntimeError, match="still alive"):
         start_runtime(settings)
     assert status_path.exists()
+
+
+def test_runtime_status_rejects_a_different_responder_pid(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    runtime_dir = settings.data_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "status.json").write_text(
+        json.dumps({"pid": 12345, "port": 12345, "token": "test-token"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_request",
+        lambda *args, **kwargs: {"state": "running", "pid": 54321},
+    )
+
+    assert get_runtime_status(settings) is None
+
