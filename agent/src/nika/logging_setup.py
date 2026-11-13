@@ -142,17 +142,20 @@ def setup_logging(
     level: int = logging.INFO,
     max_bytes: int = DEFAULT_MAX_BYTES,
     backup_count: int = DEFAULT_BACKUP_COUNT,
+    filename: str = "nika.jsonl",
 ) -> logging.Logger:
     """Configure one rotating JSONL file under the local data directory."""
     if max_bytes < 1:
         raise ValueError("max_bytes must be at least 1")
     if backup_count < 0:
         raise ValueError("backup_count must not be negative")
+    if Path(filename).name != filename or not filename.endswith(".jsonl"):
+        raise ValueError("filename must be a simple .jsonl file name")
 
     resolved = settings or Settings.from_env()
     log_dir = resolved.data_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "nika.jsonl"
+    log_path = log_dir / filename
 
     logger = logging.getLogger("nika")
     logger.setLevel(level)
