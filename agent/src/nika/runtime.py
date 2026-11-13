@@ -165,9 +165,10 @@ def stop_runtime(settings: Settings | None = None) -> bool:
         return False
 
     deadline = time.monotonic() + STOP_TIMEOUT
+    status_path = _status_path(settings)
     while time.monotonic() < deadline:
-        if _request(status, "GET", "/status", timeout=0.3) is None:
-            _status_path(settings).unlink(missing_ok=True)
+        endpoint_stopped = _request(status, "GET", "/status", timeout=0.3) is None
+        if endpoint_stopped and not status_path.exists():
             return True
         time.sleep(0.2)
     return False
