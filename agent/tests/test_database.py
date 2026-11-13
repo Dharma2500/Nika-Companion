@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from nika.database import Database, SCHEMA_VERSION
+from nika.database import SCHEMA_VERSION, Database
 
 
 def test_initialize_creates_versioned_schema(tmp_path: Path) -> None:
