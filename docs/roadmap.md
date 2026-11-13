@@ -20,6 +20,7 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [ ] Restore workflow with safe shutdown protection
 - [ ] Structured JSONL logging with secret redaction and rotation
 - [ ] Verify secret redaction in messages, structured fields and tracebacks
+- [ ] Verify CLI and runtime logs use separate process-owned files
 - [ ] Crash/restart tests and stale runtime recovery
 - [ ] Configuration validation and diagnostics
 
