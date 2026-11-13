@@ -16,6 +16,7 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Consistent SQLite backup creation, verification and retention
 - [x] Verify detached local runtime with authenticated loopback control
 - [x] Verify start, status and graceful stop commands
+- [x] Verify Windows batch launch and graceful console-close shutdown
 - [ ] Restore workflow with safe shutdown protection
 - [ ] Structured logging with secret redaction
 - [ ] Crash/restart tests and stale runtime recovery
