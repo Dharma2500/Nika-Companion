@@ -31,7 +31,9 @@ def test_runtime_can_start_report_status_and_stop(tmp_path: Path) -> None:
 
 
 
-def test_foreground_runtime_refuses_to_replace_running_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_foreground_runtime_refuses_to_replace_running_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         runtime,
         "get_runtime_status",
