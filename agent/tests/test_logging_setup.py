@@ -28,6 +28,7 @@ def test_structured_logs_are_json_and_redact_secret_fields(tmp_path: Path) -> No
             "provider": "test-provider",
             "api_key": "api-secret-value",
             "accessToken": "camelcase-token-secret",
+            "APIKey": "acronym-key-secret",
             "details": {
                 "password": "password-secret-value",
                 "safe_label": "visible",
@@ -47,6 +48,7 @@ def test_structured_logs_are_json_and_redact_secret_fields(tmp_path: Path) -> No
         "api-secret-value",
         "password-secret-value",
         "camelcase-token-secret",
+        "acronym-key-secret",
         "client-secret-value",
         "bearer-secret-value",
         "refresh-secret-value",
@@ -69,13 +71,17 @@ def test_known_token_formats_are_redacted_from_messages(tmp_path: Path) -> None:
     logger.info(
         "Tokens: ghp_abcdefghijklmnopqrstuvwxyz123456 "
         "github_pat_abcdefghijklmnopqrstuvwxyz123456 "
-        "sk-abcdefghijklmnopqrstuvwxyz123456"
+        "sk-abcdefghijklmnopqrstuvwxyz123456 "
+        "AKIA1234567890ABCDEF "
+        "123456789:abcdefghijklmnopqrstuvwxyzABCDEF"
     )
 
     log_text = (settings.data_dir / "logs" / "nika.jsonl").read_text(encoding="utf-8")
     assert "ghp_abcdefghijklmnopqrstuvwxyz123456" not in log_text
     assert "github_pat_abcdefghijklmnopqrstuvwxyz123456" not in log_text
     assert "sk-abcdefghijklmnopqrstuvwxyz123456" not in log_text
+    assert "AKIA1234567890ABCDEF" not in log_text
+    assert "123456789:abcdefghijklmnopqrstuvwxyzABCDEF" not in log_text
 
 
 def test_logging_setup_is_idempotent(tmp_path: Path) -> None:
@@ -139,6 +145,8 @@ def test_log_filename_must_be_a_simple_jsonl_name(tmp_path: Path) -> None:
         setup_logging(settings, filename="../outside.jsonl")
     with pytest.raises(ValueError, match="filename"):
         setup_logging(settings, filename="nika.txt")
+    with pytest.raises(ValueError, match="filename"):
+        setup_logging(settings, filename="..\\outside.jsonl")
 
 
 def test_custom_log_filename_is_used(tmp_path: Path) -> None:
