@@ -218,3 +218,32 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# Nika local runtime data and secrets
+NIKA_DATA/
+nika_data/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Java / Gradle / Fabric
+.gradle/
+**/build/
+**/run/
+**/logs/
+*.class
+*.jar
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
