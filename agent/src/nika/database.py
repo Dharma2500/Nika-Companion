@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Iterator
 
@@ -99,6 +99,6 @@ class Database:
 
     def health_check(self) -> bool:
         """Return whether SQLite can execute a basic integrity query."""
-        with self.connect() as connection:
+        with closing(self.connect()) as connection:
             result = connection.execute("PRAGMA quick_check").fetchone()
             return result is not None and result[0] == "ok"
