@@ -10,11 +10,13 @@ import subprocess
 import sys
 import threading
 import time
+from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
 
 from nika.config import Settings
 
@@ -210,13 +212,42 @@ def _pid_is_running(pid: int) -> bool:
     return True
 
 
-def serve() -> None:
+def _install_windows_close_handler(
+    stop_event: threading.Event,
+    shutdown_complete: threading.Event,
+) -> tuple[Any, Any]:
+    """Wait for foreground runtime cleanup when its console window is closed."""
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handler_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+    @handler_type
+    def handle_console_event(event_code: int) -> int:
+        if event_code not in (2, 5, 6):  # CLOSE, LOGOFF, SHUTDOWN
+            return 0
+        stop_event.set()
+        shutdown_complete.wait(timeout=4.0)
+        return 1
+
+    register_handler = kernel32.SetConsoleCtrlHandler
+    register_handler.argtypes = [handler_type, wintypes.BOOL]
+    register_handler.restype = wintypes.BOOL
+    if not register_handler(handle_console_event, True):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return kernel32, handle_console_event
+
+
+def serve(foreground: bool = False) -> None:
     """Run the local control server until a graceful stop request arrives."""
     settings = Settings.from_env()
+    if foreground and get_runtime_status(settings) is not None:
+        raise RuntimeError("Nika is already running. Stop the existing runtime first.")
+
     runtime_dir = _runtime_dir(settings)
     runtime_dir.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     stop_event = threading.Event()
+    shutdown_complete = threading.Event()
+    _console_handler: tuple[Any, Any] | None = None
 
     class Handler(BaseHTTPRequestHandler):
         def _authorized(self) -> bool:
@@ -255,13 +286,13 @@ def serve() -> None:
             else:
                 self._send(200, {"accepted": True})
                 stop_event.set()
-                threading.Thread(target=server.shutdown, daemon=True).start()
 
         def log_message(self, format: str, *args: object) -> None:
             return
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     server.daemon_threads = True
+    server.timeout = 0.2
     status_path = _status_path(settings)
     temporary_path = status_path.with_suffix(".tmp")
     status_data = {
@@ -273,12 +304,27 @@ def serve() -> None:
     try:
         temporary_path.write_text(json.dumps(status_data), encoding="utf-8")
         os.replace(temporary_path, status_path)
-        server.serve_forever(poll_interval=0.2)
+        if foreground and os.name == "nt":
+            _console_handler = _install_windows_close_handler(
+                stop_event,
+                shutdown_complete,
+            )
+        if foreground:
+            print("Nika runtime: RUNNING", flush=True)
+            print("Close this window to stop Nika safely.", flush=True)
+        while not stop_event.is_set():
+            server.handle_request()
+    except KeyboardInterrupt:
+        if foreground:
+            print("\\nNika runtime: stopping...", flush=True)
     finally:
-        server.server_close()
-        status_path.unlink(missing_ok=True)
-        temporary_path.unlink(missing_ok=True)
-        stop_event.set()
+        try:
+            server.server_close()
+            status_path.unlink(missing_ok=True)
+            temporary_path.unlink(missing_ok=True)
+        finally:
+            stop_event.set()
+            shutdown_complete.set()
 
 
 def main() -> None:
