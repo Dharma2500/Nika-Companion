@@ -68,10 +68,13 @@ _STANDARD_RECORD_FIELDS = frozenset(
 def _is_sensitive_key(key: object) -> bool:
     raw_key = str(key)
     normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", raw_key).casefold().replace("-", "_")
+    compact = normalized.replace("_", "")
     return (
         any(part in normalized for part in _SENSITIVE_KEY_PARTS)
+        or any(part.replace("_", "") in compact for part in _SENSITIVE_KEY_PARTS)
         or normalized == "token"
         or normalized.endswith("_token")
+        or compact.endswith("token")
     )
 
 
