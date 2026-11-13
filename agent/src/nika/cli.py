@@ -9,7 +9,10 @@ from pathlib import Path
 from nika.backup import BackupManager
 from nika.config import Settings
 from nika.database import Database
+from nika.logging_setup import get_logger, setup_logging
 from nika.runtime import get_runtime_status, serve, start_runtime, stop_runtime
+
+LOGGER = get_logger(__name__)
 
 
 def _storage() -> tuple[Settings, Database]:
@@ -24,9 +27,11 @@ def run_doctor() -> int:
         database.initialize()
         healthy = database.health_check()
     except (OSError, RuntimeError, sqlite3.Error) as error:
+        LOGGER.exception("doctor.failed", extra={"database_path": str(settings.database_path)})
         print(f"Nika local core: ERROR ({error})")
         return 1
 
+    LOGGER.info("doctor.completed", extra={"database_healthy": healthy})
     print("Nika local core: OK")
     print(f"Data directory: {settings.data_dir}")
     print(f"Database: {settings.database_path}")
@@ -41,9 +46,11 @@ def run_backup() -> int:
         manager = BackupManager(database, settings.data_dir / "backups")
         backup_path = manager.create_backup()
     except (OSError, RuntimeError, sqlite3.Error) as error:
+        LOGGER.exception("backup.failed")
         print(f"Backup: ERROR ({error})")
         return 1
 
+    LOGGER.info("backup.created", extra={"backup_path": str(backup_path)})
     print("Backup: OK")
     print(f"File: {backup_path}")
     print(f"Retained backups: {len(manager.list_backups())}")
@@ -67,8 +74,10 @@ def run_start() -> int:
     try:
         result = start_runtime()
     except (OSError, RuntimeError) as error:
+        LOGGER.exception("runtime.start_failed")
         print(f"Nika start: ERROR ({error})")
         return 1
+    LOGGER.info("runtime.start_command", extra={"result": result})
     if result == "already_running":
         print("Nika runtime: already running")
     else:
@@ -80,6 +89,7 @@ def run_foreground() -> int:
     try:
         serve(foreground=True)
     except (OSError, RuntimeError) as error:
+        LOGGER.exception("runtime.foreground_failed")
         print(f"Nika foreground: ERROR ({error})")
         return 1
     return 0
@@ -99,8 +109,10 @@ def run_stop() -> int:
     try:
         stopped = stop_runtime()
     except (OSError, RuntimeError) as error:
+        LOGGER.exception("runtime.stop_failed")
         print(f"Nika stop: ERROR ({error})")
         return 1
+    LOGGER.info("runtime.stop_command", extra={"stopped": stopped})
     if stopped:
         print("Nika runtime: stopped")
         return 0
@@ -125,6 +137,8 @@ def main() -> None:
     subparsers.add_parser("stop", help="gracefully stop the local Nika runtime")
 
     args = parser.parse_args()
+    setup_logging()
+    LOGGER.info("cli.command", extra={"command": args.command or "help"})
     commands = {
         "doctor": run_doctor,
         "backup": run_backup,
