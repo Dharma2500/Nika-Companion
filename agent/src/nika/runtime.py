@@ -24,7 +24,6 @@ LOGGER = get_logger(__name__)
 
 START_TIMEOUT = 15.0
 STOP_TIMEOUT = 10.0
-START_LOCK_GRACE = START_TIMEOUT + 5.0
 
 
 def _runtime_dir(settings: Settings) -> Path:
@@ -92,45 +91,51 @@ def get_runtime_status(settings: Settings | None = None) -> dict[str, Any] | Non
 
 
 def _acquire_start_lock(settings: Settings) -> int:
-    """Create the startup lock, recovering only locks known to be stale."""
+    """Acquire an OS-level startup lock that is released automatically on process exit."""
     lock_path = _lock_path(settings)
-    for _ in range(3):
-        try:
-            return os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError as error:
-            try:
-                lock_text = lock_path.read_text(encoding="ascii").strip()
-                lock_pid = int(lock_text)
-            except (OSError, ValueError):
-                try:
-                    lock_age = time.time() - lock_path.stat().st_mtime
-                except FileNotFoundError:
-                    continue
-                if lock_age < START_LOCK_GRACE:
-                    raise RuntimeError(
-                        "Nika is already starting; its startup lock is not ready yet."
-                    ) from error
-            else:
-                if _pid_is_running(lock_pid):
-                    raise RuntimeError("Nika is already starting.") from error
-
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                continue
-
-    raise RuntimeError("Could not acquire Nika's startup lock. Try again.")
-
-
-def _release_start_lock(settings: Settings) -> None:
-    """Remove the startup lock only when it still belongs to this process."""
-    lock_path = _lock_path(settings)
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        owner_pid = int(lock_path.read_text(encoding="ascii").strip())
-    except (OSError, ValueError):
-        return
-    if owner_pid == os.getpid():
-        lock_path.unlink(missing_ok=True)
+        if os.fstat(descriptor).st_size == 0:
+            os.write(descriptor, b"0")
+        os.lseek(descriptor, 0, os.SEEK_SET)
+
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            raise RuntimeError("Nika is already starting.") from error
+
+        os.ftruncate(descriptor, 0)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        os.write(descriptor, str(os.getpid()).encode("ascii"))
+        return descriptor
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def _release_start_lock(descriptor: int) -> None:
+    """Release the OS-level startup lock and close its file descriptor."""
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+    except OSError:
+        LOGGER.exception("runtime.start_lock_release_failed")
+    finally:
+        os.close(descriptor)
 
 
 def _check_stale_runtime_status(settings: Settings) -> None:
@@ -178,17 +183,14 @@ def start_runtime(settings: Settings | None = None) -> str:
 
     LOGGER.info("runtime.start_requested")
     descriptor = _acquire_start_lock(settings)
-    with os.fdopen(descriptor, "w", encoding="ascii") as lock_file:
-        lock_file.write(str(os.getpid()))
-
     try:
         if get_runtime_status(settings) is not None:
-            _release_start_lock(settings)
+            _release_start_lock(descriptor)
             LOGGER.info("runtime.start_skipped", extra={"reason": "already_running"})
             return "already_running"
         _check_stale_runtime_status(settings)
     except Exception:
-        _release_start_lock(settings)
+        _release_start_lock(descriptor)
         raise
 
     log_path = settings.data_dir / "logs" / "runtime.jsonl"
@@ -212,18 +214,18 @@ def start_runtime(settings: Settings | None = None) -> str:
             env=child_env,
         )
     except OSError:
-        _release_start_lock(settings)
+        _release_start_lock(descriptor)
         raise
 
     deadline = time.monotonic() + START_TIMEOUT
     while time.monotonic() < deadline:
         live_status = get_runtime_status(settings)
         if live_status is not None:
-            _release_start_lock(settings)
+            _release_start_lock(descriptor)
             LOGGER.info("runtime.started", extra={"pid": live_status["pid"]})
             return "started"
         if process.poll() is not None:
-            _release_start_lock(settings)
+            _release_start_lock(descriptor)
             raise RuntimeError(
                 f"Nika runtime exited during startup. Check the log: {log_path}"
             )
@@ -235,7 +237,7 @@ def start_runtime(settings: Settings | None = None) -> str:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             process.kill()
-    _release_start_lock(settings)
+    _release_start_lock(descriptor)
     raise RuntimeError(f"Nika runtime did not become ready. Check the log: {log_path}")
 
 
@@ -333,18 +335,16 @@ def serve(foreground: bool = False) -> None:
 
     runtime_dir = _runtime_dir(settings)
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    foreground_lock_owned = False
+    foreground_lock_descriptor: int | None = None
     if foreground:
-        descriptor = _acquire_start_lock(settings)
-        with os.fdopen(descriptor, "w", encoding="ascii") as lock_file:
-            lock_file.write(str(os.getpid()))
-        foreground_lock_owned = True
+        foreground_lock_descriptor = _acquire_start_lock(settings)
         try:
             if get_runtime_status(settings) is not None:
                 raise RuntimeError("Nika is already running. Stop the existing runtime first.")
             _check_stale_runtime_status(settings)
         except Exception:
-            _release_start_lock(settings)
+            _release_start_lock(foreground_lock_descriptor)
+            foreground_lock_descriptor = None
             raise
 
     token = secrets.token_urlsafe(32)
@@ -409,9 +409,9 @@ def serve(foreground: bool = False) -> None:
         }
         temporary_path.write_text(json.dumps(status_data), encoding="utf-8")
         os.replace(temporary_path, status_path)
-        if foreground_lock_owned:
-            _release_start_lock(settings)
-            foreground_lock_owned = False
+        if foreground_lock_descriptor is not None:
+            _release_start_lock(foreground_lock_descriptor)
+            foreground_lock_descriptor = None
         if foreground and os.name == "nt":
             _console_handler = _install_windows_close_handler(
                 stop_event,
@@ -437,8 +437,8 @@ def serve(foreground: bool = False) -> None:
             temporary_path.unlink(missing_ok=True)
             LOGGER.info("runtime.serve_stopped", extra={"pid": os.getpid()})
         finally:
-            if foreground_lock_owned:
-                _release_start_lock(settings)
+            if foreground_lock_descriptor is not None:
+                _release_start_lock(foreground_lock_descriptor)
             stop_event.set()
             shutdown_complete.set()
 
