@@ -1,3 +1,5 @@
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -37,11 +39,7 @@ def test_newer_schema_is_not_modified(tmp_path: Path) -> None:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 999
 
 
-
 def test_failed_migration_rolls_back_partial_schema(tmp_path: Path) -> None:
-    import sqlite3
-    from contextlib import closing
-
     database = Database(tmp_path / "broken-migration.sqlite3")
     with closing(database.connect()) as connection:
         connection.execute("CREATE TABLE memories (sentinel INTEGER)")
