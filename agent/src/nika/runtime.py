@@ -107,7 +107,7 @@ def start_runtime(settings: Settings | None = None) -> str:
     log_file = log_path.open("a", encoding="utf-8")
     flags = 0
     if os.name == "nt":
-        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        flags = subprocess.CREATE_NO_WINDOW
 
     child_env = os.environ.copy()
     child_env["NIKA_DATA"] = str(settings.data_dir.resolve())
