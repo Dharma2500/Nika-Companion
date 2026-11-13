@@ -19,6 +19,7 @@ def test_runtime_can_start_report_status_and_stop(tmp_path: Path) -> None:
 
     assert start_runtime(settings) == "already_running"
     assert stop_runtime(settings)
+    assert not (settings.data_dir / "runtime" / "status.json").exists()
 
     deadline = time.monotonic() + 3
     while get_runtime_status(settings) is not None and time.monotonic() < deadline:
