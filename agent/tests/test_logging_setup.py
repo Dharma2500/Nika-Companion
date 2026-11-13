@@ -141,6 +141,19 @@ def test_exception_tracebacks_are_redacted(tmp_path: Path) -> None:
 
 
 
+
+def test_multiline_secret_assignments_are_redacted(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    logger = setup_logging(settings)
+    logger.info('private_key="first-line\nsecond-line"')
+
+    log_text = (settings.data_dir / "logs" / "nika.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert "first-line" not in log_text
+    assert "second-line" not in log_text
+    assert "[REDACTED]" in log_text
+
 def test_log_filename_must_be_a_simple_jsonl_name(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     with pytest.raises(ValueError, match="filename"):
