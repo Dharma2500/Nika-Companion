@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from nika.config import Settings
-from nika.logging_setup import get_logger, setup_logging
+from nika.logging_setup import setup_logging
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -27,9 +27,11 @@ def test_structured_logs_are_json_and_redact_secret_fields(tmp_path: Path) -> No
         extra={
             "provider": "test-provider",
             "api_key": "api-secret-value",
+            "accessToken": "camelcase-token-secret",
             "details": {
                 "password": "password-secret-value",
                 "safe_label": "visible",
+                "clientSecret": "client-secret-value",
             },
         },
     )
@@ -44,6 +46,8 @@ def test_structured_logs_are_json_and_redact_secret_fields(tmp_path: Path) -> No
     for secret in (
         "api-secret-value",
         "password-secret-value",
+        "camelcase-token-secret",
+        "client-secret-value",
         "bearer-secret-value",
         "refresh-secret-value",
     ):
@@ -53,6 +57,7 @@ def test_structured_logs_are_json_and_redact_secret_fields(tmp_path: Path) -> No
     assert records[0]["details"] == {
         "password": "[REDACTED]",
         "safe_label": "visible",
+        "clientSecret": "[REDACTED]",
     }
     assert records[0]["level"] == "INFO"
     assert records[0]["logger"] == "nika"
@@ -110,7 +115,6 @@ def test_logging_rejects_invalid_rotation_settings(tmp_path: Path) -> None:
         setup_logging(settings, max_bytes=0)
     with pytest.raises(ValueError, match="backup_count"):
         setup_logging(settings, backup_count=-1)
-
 
 
 def test_exception_tracebacks_are_redacted(tmp_path: Path) -> None:
