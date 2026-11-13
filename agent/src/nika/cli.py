@@ -9,7 +9,7 @@ from pathlib import Path
 from nika.backup import BackupManager
 from nika.config import Settings
 from nika.database import Database
-from nika.runtime import get_runtime_status, start_runtime, stop_runtime
+from nika.runtime import get_runtime_status, serve, start_runtime, stop_runtime
 
 
 def _storage() -> tuple[Settings, Database]:
@@ -76,6 +76,15 @@ def run_start() -> int:
     return 0
 
 
+def run_foreground() -> int:
+    try:
+        serve(foreground=True)
+    except (OSError, RuntimeError) as error:
+        print(f"Nika foreground: ERROR ({error})")
+        return 1
+    return 0
+
+
 def run_status() -> int:
     status = get_runtime_status()
     if status is None:
@@ -110,7 +119,8 @@ def main() -> None:
         help="verify a backup file",
     )
     verify_parser.add_argument("path", help="path to the SQLite backup")
-    subparsers.add_parser("start", help="start the local Nika runtime")
+    subparsers.add_parser("start", help="start the local Nika runtime in the background")
+    subparsers.add_parser("foreground", help="run Nika in this console; closing it stops Nika")
     subparsers.add_parser("status", help="show local runtime status")
     subparsers.add_parser("stop", help="gracefully stop the local Nika runtime")
 
@@ -119,6 +129,7 @@ def main() -> None:
         "doctor": run_doctor,
         "backup": run_backup,
         "start": run_start,
+        "foreground": run_foreground,
         "status": run_status,
         "stop": run_stop,
     }
