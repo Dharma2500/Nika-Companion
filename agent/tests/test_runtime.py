@@ -54,14 +54,8 @@ def test_foreground_runtime_refuses_to_replace_running_instance(
 def test_runtime_recovers_after_ungraceful_process_exit(tmp_path: Path) -> None:
     # Use a unique directory so stale processes from interrupted test runs cannot
     # make this test inspect another run's status file.
-    settings = Settings(
-        data_dir=tmp_path / f"nika-data-{uuid.uuid4().hex}",
-        database_path=tmp_path / f"nika-data-{uuid.uuid4().hex}" / "nika.sqlite3",
-    )
-    settings = Settings(
-        data_dir=settings.data_dir,
-        database_path=settings.data_dir / "nika.sqlite3",
-    )
+    data_dir = tmp_path / f"nika-data-{uuid.uuid4().hex}"
+    settings = Settings(data_dir=data_dir, database_path=data_dir / "nika.sqlite3")
 
     assert start_runtime(settings) == "started"
     crashed_status = get_runtime_status(settings)
