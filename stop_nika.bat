@@ -12,4 +12,7 @@ if not exist ".venv\scripts\python.exe" (
 if errorlevel 1 (
     echo Nika is not running or could not stop cleanly.
     pause
+) else (
+    echo Nika stopped.
+    timeout /t 2 >nul
 )
