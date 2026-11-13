@@ -90,13 +90,13 @@ def start_runtime(settings: Settings | None = None) -> str:
     lock_path = _lock_path(settings)
     try:
         descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
+    except FileExistsError as error:
         try:
             lock_pid = int(lock_path.read_text(encoding="ascii").strip())
         except (OSError, ValueError):
             lock_pid = -1
         if _pid_is_running(lock_pid):
-            raise RuntimeError("Nika is already starting.")
+            raise RuntimeError("Nika is already starting.") from error
         lock_path.unlink(missing_ok=True)
         descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 
@@ -109,6 +109,10 @@ def start_runtime(settings: Settings | None = None) -> str:
     if os.name == "nt":
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
 
+    child_env = os.environ.copy()
+    child_env["NIKA_DATA"] = str(settings.data_dir.resolve())
+    child_env["NIKA_DATABASE_PATH"] = str(settings.database_path.resolve())
+
     try:
         process = subprocess.Popen(
             [sys.executable, "-m", "nika.runtime", "--serve"],
@@ -118,6 +122,7 @@ def start_runtime(settings: Settings | None = None) -> str:
             close_fds=True,
             creationflags=flags,
             start_new_session=os.name != "nt",
+            env=child_env,
         )
     except OSError:
         lock_path.unlink(missing_ok=True)
