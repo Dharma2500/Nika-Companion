@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -50,12 +51,12 @@ class EventStore:
         return event_id
 
     def count(self) -> int:
-        with self.database.connect() as connection:
+        with closing(self.database.connect()) as connection:
             row = connection.execute("SELECT COUNT(*) FROM event_log").fetchone()
             return int(row[0])
 
     def get(self, event_id: str) -> sqlite3.Row | None:
-        with self.database.connect() as connection:
+        with closing(self.database.connect()) as connection:
             return connection.execute(
                 "SELECT * FROM event_log WHERE event_id = ?",
                 (event_id,),
