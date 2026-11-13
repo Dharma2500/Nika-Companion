@@ -1,8 +1,10 @@
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
+import uuid
 from http.client import IncompleteRead
 from pathlib import Path
 
@@ -50,49 +52,37 @@ def test_foreground_runtime_refuses_to_replace_running_instance(
 
 
 def test_runtime_recovers_after_ungraceful_process_exit(tmp_path: Path) -> None:
+    # Use a unique directory so stale processes from interrupted test runs cannot
+    # make this test inspect another run's status file.
     settings = Settings(
-        data_dir=tmp_path / "nika-data",
-        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+        data_dir=tmp_path / f"nika-data-{uuid.uuid4().hex}",
+        database_path=tmp_path / f"nika-data-{uuid.uuid4().hex}" / "nika.sqlite3",
     )
-    env = os.environ.copy()
-    env["NIKA_DATA"] = str(settings.data_dir)
-    env["NIKA_DATABASE_PATH"] = str(settings.database_path)
-    process = subprocess.Popen(
-        [sys.executable, "-m", "nika.runtime", "--serve"],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env=env,
+    settings = Settings(
+        data_dir=settings.data_dir,
+        database_path=settings.data_dir / "nika.sqlite3",
     )
+
+    assert start_runtime(settings) == "started"
+    crashed_status = get_runtime_status(settings)
+    assert crashed_status is not None
+    crashed_pid = crashed_status["pid"]
     status_path = settings.data_dir / "runtime" / "status.json"
 
-    try:
-        deadline = time.monotonic() + 10
-        crashed_status = None
-        while time.monotonic() < deadline:
-            crashed_status = get_runtime_status(settings)
-            if crashed_status is not None:
-                break
-            if process.poll() is not None:
-                break
-            time.sleep(0.05)
+    # Terminate the PID reported by the authenticated Runtime endpoint. This
+    # avoids assuming that Windows' Popen PID is always the service PID.
+    os.kill(crashed_pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while runtime._pid_is_running(crashed_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
 
-        assert crashed_status is not None
-        assert crashed_status["pid"] == process.pid
-        process.kill()
-        process.wait(timeout=5)
+    assert not runtime._pid_is_running(crashed_pid)
+    assert status_path.exists()  # A forced exit cannot run the cleanup block.
+    assert get_runtime_status(settings) is None
 
-        assert status_path.exists()  # An abrupt exit cannot run the cleanup block.
-        assert get_runtime_status(settings) is None
-        assert start_runtime(settings) == "started"
-        assert get_runtime_status(settings) is not None
-        assert stop_runtime(settings)
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait(timeout=5)
-        if get_runtime_status(settings) is not None:
-            stop_runtime(settings)
+    assert start_runtime(settings) == "started"
+    assert get_runtime_status(settings) is not None
+    assert stop_runtime(settings)
 
 
 def test_startup_lock_is_exclusive_and_released_after_process_exit(
