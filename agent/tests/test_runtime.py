@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import time
+from http.client import IncompleteRead
 from pathlib import Path
 
 import pytest
@@ -204,3 +205,22 @@ def test_runtime_status_rejects_a_different_responder_pid(
 
     assert get_runtime_status(settings) is None
 
+
+
+
+def test_request_handles_truncated_http_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class TruncatedResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self) -> bytes:
+            raise IncompleteRead(b"", 20)
+
+    monkeypatch.setattr(runtime, "urlopen", lambda *args, **kwargs: TruncatedResponse())
+
+    assert runtime._request({"port": 12345, "token": "test"}, "GET", "/status") is None
