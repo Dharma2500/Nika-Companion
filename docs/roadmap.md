@@ -14,10 +14,11 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 
 - [x] Structured storage foundation and schema migration rollback test
 - [x] Consistent SQLite backup creation, verification and retention
+- [x] Detached local runtime with authenticated loopback control
+- [x] Start, status and graceful stop commands
 - [ ] Restore workflow with safe shutdown protection
 - [ ] Structured logging with secret redaction
-- [ ] Process lifecycle, graceful shutdown and health endpoint
-- [ ] Crash/restart tests
+- [ ] Crash/restart tests and stale runtime recovery
 - [ ] Configuration validation and diagnostics
 
 ## Phase 2: Minecraft client integration
