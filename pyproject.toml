@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nika-companion"
+version = "0.1.0"
+description = "A persistent local AI companion with Minecraft integration."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Vitaly" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<10", "ruff>=0.14,<0.15"]
+
+[project.scripts]
+nika = "nika.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "agent/src"}
+
+[tool.setuptools.packages.find]
+where = ["agent/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["agent/tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["agent/src", "agent/tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
