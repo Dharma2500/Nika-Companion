@@ -67,7 +67,11 @@ _STANDARD_RECORD_FIELDS = frozenset(
 
 def _is_sensitive_key(key: object) -> bool:
     normalized = str(key).casefold().replace("-", "_")
-    return any(part in normalized for part in _SENSITIVE_KEY_PARTS) or normalized == "token"
+    return (
+        any(part in normalized for part in _SENSITIVE_KEY_PARTS)
+        or normalized == "token"
+        or normalized.endswith("_token")
+    )
 
 
 def redact_value(value: Any, *, key: object | None = None) -> Any:
@@ -79,6 +83,7 @@ def redact_value(value: Any, *, key: object | None = None) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [redact_value(item) for item in value]
     if isinstance(value, str):
+        text = _BEARER_TOKEN.sub("Bearer " + REDACTED, value)
         text = _SECRET_ASSIGNMENT.sub(
             lambda match: (
                 match.group("prefix")
@@ -86,9 +91,8 @@ def redact_value(value: Any, *, key: object | None = None) -> Any:
                 + REDACTED
                 + (match.group("quote") or "")
             ),
-            value,
+            text,
         )
-        text = _BEARER_TOKEN.sub("Bearer " + REDACTED, text)
         for pattern in _KNOWN_TOKEN_FORMATS:
             text = pattern.sub(REDACTED, text)
         return text
