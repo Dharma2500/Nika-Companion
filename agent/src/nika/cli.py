@@ -64,6 +64,7 @@ def run_backup_verify(path: str) -> int:
     try:
         valid = manager.verify_backup(Path(path))
     except (OSError, RuntimeError, sqlite3.Error) as error:
+        LOGGER.exception("backup.verification_failed", extra={"backup_path": path})
         print(f"Backup verification: ERROR ({error})")
         return 1
 
@@ -87,6 +88,8 @@ def run_start() -> int:
 
 
 def run_foreground() -> int:
+    settings = Settings.from_env()
+    setup_logging(settings, filename="runtime.jsonl")
     try:
         serve(foreground=True)
     except (OSError, RuntimeError) as error:
