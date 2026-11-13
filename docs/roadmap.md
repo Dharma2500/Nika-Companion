@@ -8,7 +8,7 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Add versioned SQLite schema
 - [x] Add append-only local event journal
 - [x] Keep local runtime data outside Git
-- [ ] Verify first successful GitHub Actions run
+- [x] Verify first successful GitHub Actions run (Python 3.11, 3.12 and 3.13)
 
 ## Phase 1: reliable local agent
 
