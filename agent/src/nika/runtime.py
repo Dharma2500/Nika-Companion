@@ -109,8 +109,7 @@ def start_runtime(settings: Settings | None = None) -> str:
     with os.fdopen(descriptor, "w", encoding="ascii") as lock_file:
         lock_file.write(str(os.getpid()))
 
-    log_path = runtime_dir / "nika.log"
-    log_file = log_path.open("a", encoding="utf-8")
+    log_path = settings.data_dir / "logs" / "nika.jsonl"
     flags = 0
     if os.name == "nt":
         flags = subprocess.CREATE_NO_WINDOW
@@ -123,8 +122,8 @@ def start_runtime(settings: Settings | None = None) -> str:
         process = subprocess.Popen(
             [sys.executable, "-m", "nika.runtime", "--serve"],
             stdin=subprocess.DEVNULL,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             close_fds=True,
             creationflags=flags,
             start_new_session=os.name != "nt",
@@ -133,8 +132,6 @@ def start_runtime(settings: Settings | None = None) -> str:
     except OSError:
         lock_path.unlink(missing_ok=True)
         raise
-    finally:
-        log_file.close()
 
     deadline = time.monotonic() + START_TIMEOUT
     while time.monotonic() < deadline:
