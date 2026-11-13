@@ -1,4 +1,4 @@
-# Nika-Companion# Nika-Companion
+# Nika-Companion
 
 Nika is a private, evolving AI companion designed to work alongside Vitaly in Minecraft and outside the game.
 
@@ -37,6 +37,8 @@ python -m nika.cli doctor
 ~~~
 
 The first doctor run creates the local data directory and initializes SQLite. By default, data is stored in ~/NIKA_DATA. Set NIKA_DATA to choose another location.
+
+Operational logs are written to `NIKA_DATA/logs/nika.jsonl` as structured JSON Lines. The active log is limited to 2 MiB and five rotated files are retained. Known credential fields and common token formats are redacted before writing.
 
 **Windows PowerShell**
 ~~~powershell
