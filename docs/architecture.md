@@ -97,6 +97,13 @@ External models are optional reasoning providers, not the storage layer or the a
 
 No component may claim that an unknown task can be solved offline without a matching skill or deterministic procedure.
 
+## Companion visual identity
+
+The in-game avatar for Nika is planned to use the Minecraft model/entity called
+"Тихоня". This supersedes the earlier alt-style avatar concept. The renderer
+and integration are not implemented yet; this is a recorded art-direction
+decision for the future companion model.
+
 ## Minecraft integration
 
 The target is a Fabric 1.21.11 client-side mod. Nika's companion rendering is local to Vitaly's client. The mod reports only data legitimately exposed to the client and forwards requests through a versioned localhost protocol. The Python agent independently validates every incoming message and action request.
