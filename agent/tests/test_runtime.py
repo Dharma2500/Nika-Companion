@@ -94,37 +94,54 @@ def test_runtime_recovers_after_ungraceful_process_exit(tmp_path: Path) -> None:
             stop_runtime(settings)
 
 
-def test_start_recovers_stale_startup_lock(tmp_path: Path) -> None:
-    settings = Settings(
-        data_dir=tmp_path / "nika-data",
-        database_path=tmp_path / "nika-data" / "nika.sqlite3",
-    )
-    runtime_dir = settings.data_dir / "runtime"
-    runtime_dir.mkdir(parents=True)
-    (runtime_dir / "start.lock").write_text("999999999", encoding="ascii")
-
-    assert start_runtime(settings) == "started"
-    assert not (runtime_dir / "start.lock").exists()
-    assert stop_runtime(settings)
-
-
-def test_start_does_not_delete_a_fresh_unreadable_startup_lock(
+def test_startup_lock_is_exclusive_and_released_after_process_exit(
     tmp_path: Path,
 ) -> None:
     settings = Settings(
         data_dir=tmp_path / "nika-data",
         database_path=tmp_path / "nika-data" / "nika.sqlite3",
     )
-    runtime_dir = settings.data_dir / "runtime"
-    runtime_dir.mkdir(parents=True)
-    lock_path = runtime_dir / "start.lock"
-    lock_path.write_text("", encoding="ascii")
+    env = os.environ.copy()
+    env["NIKA_DATA"] = str(settings.data_dir)
+    env["NIKA_DATABASE_PATH"] = str(settings.database_path)
+    code = (
+        "import time; "
+        "from nika.config import Settings; "
+        "from nika.runtime import _acquire_start_lock; "
+        "_acquire_start_lock(Settings.from_env()); "
+        "print('locked', flush=True); "
+        "time.sleep(60)"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", code],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
+    )
 
-    with pytest.raises(RuntimeError, match="already starting"):
-        start_runtime(settings)
-    assert lock_path.exists()
+    try:
+        deadline = time.monotonic() + 5
+        acquired_by_other = False
+        while time.monotonic() < deadline and process.poll() is None:
+            try:
+                descriptor = runtime._acquire_start_lock(settings)
+            except RuntimeError as error:
+                assert "already starting" in str(error)
+                acquired_by_other = True
+                break
+            else:
+                runtime._release_start_lock(descriptor)
+                time.sleep(0.05)
 
+        assert acquired_by_other
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
 
+    descriptor = runtime._acquire_start_lock(settings)
+    runtime._release_start_lock(descriptor)
 def test_start_refuses_to_replace_invalid_status_file(tmp_path: Path) -> None:
     settings = Settings(
         data_dir=tmp_path / "nika-data",
