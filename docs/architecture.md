@@ -77,6 +77,14 @@ A fact about one world must not silently become a fact about every world. A reus
 - Backups and restore verification will be implemented before memory is considered production-safe.
 - NIKA_DATA is outside the Git repository by default.
 
+### Operational logs
+
+The agent writes structured JSON Lines to `NIKA_DATA/logs/nika.jsonl`.
+The file rotates at a bounded size, keeping a fixed number of prior files.
+The formatter redacts known sensitive field names and recognizable credential
+formats. Logs are diagnostic records only; SQLite remains the source of truth
+for durable events and memory.
+
 ## API degradation
 
 External models are optional reasoning providers, not the storage layer or the agent process itself. The provider manager will later expose explicit modes:
