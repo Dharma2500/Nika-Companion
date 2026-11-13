@@ -37,12 +37,13 @@ def test_structured_logs_are_json_and_redact_secret_fields(tmp_path: Path) -> No
         },
     )
     logger.warning("Request failed: Authorization: Bearer bearer-secret-value")
+    logger.warning("bot_token=plain-token-secret")
     logger.info("Config string: %s", '{"refresh_token": "refresh-secret-value"}')
 
     log_path = settings.data_dir / "logs" / "nika.jsonl"
     records = _read_json_lines(log_path)
 
-    assert len(records) == 3
+    assert len(records) == 4
     serialized = log_path.read_text(encoding="utf-8")
     for secret in (
         "api-secret-value",
@@ -51,6 +52,7 @@ def test_structured_logs_are_json_and_redact_secret_fields(tmp_path: Path) -> No
         "acronym-key-secret",
         "client-secret-value",
         "bearer-secret-value",
+        "plain-token-secret",
         "refresh-secret-value",
     ):
         assert secret not in serialized
