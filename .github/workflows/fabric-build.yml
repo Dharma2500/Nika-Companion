@@ -1,0 +1,51 @@
+name: Fabric client mod build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "minecraft-mod/**"
+      - ".github/workflows/fabric-build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "minecraft-mod/**"
+      - ".github/workflows/fabric-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        if: hashFiles('minecraft-mod/gradlew') != ''
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build Fabric mod
+        if: hashFiles('minecraft-mod/gradlew') != ''
+        working-directory: minecraft-mod
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon build
+
+      - name: Explain skipped build
+        if: hashFiles('minecraft-mod/gradlew') == ''
+        run: echo "::notice::Fabric build skipped because the Gradle wrapper has not been added yet."
+
+      - name: Upload JAR artifacts
+        if: hashFiles('minecraft-mod/gradlew') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nika-companion-fabric-${{ github.sha }}
+          path: minecraft-mod/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14
