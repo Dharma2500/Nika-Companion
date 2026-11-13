@@ -79,8 +79,9 @@ A fact about one world must not silently become a fact about every world. A reus
 
 ### Operational logs
 
-The agent writes structured JSON Lines to `NIKA_DATA/logs/nika.jsonl`.
-The file rotates at a bounded size, keeping a fixed number of prior files.
+The CLI and background runtime write separate structured JSONL files under
+`NIKA_DATA/logs/`. Each file rotates at a bounded size, keeping a fixed
+number of prior files.
 The formatter redacts known sensitive field names and recognizable credential
 formats. Logs are diagnostic records only; SQLite remains the source of truth
 for durable events and memory.
