@@ -35,6 +35,7 @@ def run_doctor() -> int:
     print("Nika local core: OK")
     print(f"Data directory: {settings.data_dir}")
     print(f"Database: {settings.database_path}")
+    print(f"Logs: {settings.data_dir / 'logs' / 'nika.jsonl'}")
     print(f"SQLite integrity: {'OK' if healthy else 'FAILED'}")
     return 0 if healthy else 1
 
