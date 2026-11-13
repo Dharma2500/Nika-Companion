@@ -21,7 +21,7 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Structured JSONL logging with secret redaction and rotation
 - [x] Verify secret redaction in messages, structured fields and tracebacks
 - [x] Verify CLI and runtime logs use separate process-owned files
-- [ ] Crash/restart tests and stale runtime recovery
+- [x] Crash/restart tests and stale runtime recovery (CI: Python 3.11–3.13; verified locally on Windows with Python 3.15.1)
 - [ ] Configuration validation and diagnostics
 
 ## Phase 2: Minecraft client integration
