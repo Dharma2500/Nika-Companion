@@ -130,3 +130,20 @@ def test_exception_tracebacks_are_redacted(tmp_path: Path) -> None:
     )
     assert "exception-secret-value" not in log_text
     assert "[REDACTED]" in log_text
+
+
+
+def test_log_filename_must_be_a_simple_jsonl_name(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    with pytest.raises(ValueError, match="filename"):
+        setup_logging(settings, filename="../outside.jsonl")
+    with pytest.raises(ValueError, match="filename"):
+        setup_logging(settings, filename="nika.txt")
+
+
+def test_custom_log_filename_is_used(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    logger = setup_logging(settings, filename="runtime.jsonl")
+    logger.info("runtime started")
+
+    assert (settings.data_dir / "logs" / "runtime.jsonl").is_file()
