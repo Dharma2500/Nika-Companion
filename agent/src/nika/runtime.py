@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import secrets
@@ -168,8 +169,30 @@ def stop_runtime(settings: Settings | None = None) -> bool:
 
 
 def _pid_is_running(pid: int) -> bool:
+    """Check a PID without sending a signal that could affect the process on Windows."""
     if pid <= 0:
         return False
+    if os.name == "nt":
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        open_process = kernel32.OpenProcess
+        open_process.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        open_process.restype = ctypes.c_void_p
+        handle = open_process(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            get_exit_code = kernel32.GetExitCodeProcess
+            get_exit_code.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+            get_exit_code.restype = ctypes.c_int
+            if not get_exit_code(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == 259  # STILL_ACTIVE
+        finally:
+            close_handle = kernel32.CloseHandle
+            close_handle.argtypes = [ctypes.c_void_p]
+            close_handle.restype = ctypes.c_int
+            close_handle(handle)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
