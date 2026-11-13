@@ -60,6 +60,16 @@ docs/                   Architecture, security and roadmap
 pyproject.toml          Python project and tool configuration
 ~~~
 
+## Windows desktop launch
+
+After installing the project with the commands above, use the two batch files in the repository root:
+
+- Double-click `start_nika.bat` to run Nika in a visible console window.
+- Close that window with its X button to request a graceful shutdown. The console handler waits for runtime cleanup before Windows closes the process.
+- Alternatively, double-click `stop_nika.bat` to stop Nika from another window.
+
+Do not launch the foreground batch while a background runtime is already running. Stop the existing runtime first with `stop_nika.bat`.
+
 ## Security boundary
 
 Never commit API keys, .env files, SQLite databases, chat logs, world snapshots, or backups. The local data directory is intentionally separate from the repository. See docs/security.md.
