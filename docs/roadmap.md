@@ -14,8 +14,8 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 
 - [x] Structured storage foundation and schema migration rollback test
 - [x] Consistent SQLite backup creation, verification and retention
-- [x] Detached local runtime with authenticated loopback control
-- [x] Start, status and graceful stop commands
+- [ ] Verify detached local runtime with authenticated loopback control
+- [ ] Verify start, status and graceful stop commands
 - [ ] Restore workflow with safe shutdown protection
 - [ ] Structured logging with secret redaction
 - [ ] Crash/restart tests and stale runtime recovery
