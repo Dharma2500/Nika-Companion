@@ -341,7 +341,7 @@ def serve(foreground: bool = False) -> None:
 
 def main() -> None:
     settings = Settings.from_env()
-    setup_logging(settings)
+    setup_logging(settings, filename="runtime.jsonl")
     if len(sys.argv) == 2 and sys.argv[1] == "--serve":
         try:
             serve()
