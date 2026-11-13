@@ -18,6 +18,9 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from nika.config import Settings
+from nika.logging_setup import get_logger, setup_logging
+
+LOGGER = get_logger(__name__)
 
 START_TIMEOUT = 15.0
 STOP_TIMEOUT = 10.0
@@ -86,8 +89,10 @@ def start_runtime(settings: Settings | None = None) -> str:
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
     if get_runtime_status(settings) is not None:
+        LOGGER.info("runtime.start_skipped", extra={"reason": "already_running"})
         return "already_running"
 
+    LOGGER.info("runtime.start_requested")
     lock_path = _lock_path(settings)
     try:
         descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -136,6 +141,7 @@ def start_runtime(settings: Settings | None = None) -> str:
         live_status = get_runtime_status(settings)
         if live_status is not None:
             lock_path.unlink(missing_ok=True)
+            LOGGER.info("runtime.started", extra={"pid": live_status["pid"]})
             return "started"
         if process.poll() is not None:
             lock_path.unlink(missing_ok=True)
@@ -163,13 +169,17 @@ def stop_runtime(settings: Settings | None = None) -> bool:
 
     response = _request(status, "POST", "/stop")
     if response is None or response.get("accepted") is not True:
+        LOGGER.warning("runtime.stop_request_rejected")
         return False
+
+    LOGGER.info("runtime.stop_requested", extra={"pid": status.get("pid")})
 
     deadline = time.monotonic() + STOP_TIMEOUT
     status_path = _status_path(settings)
     while time.monotonic() < deadline:
         endpoint_stopped = _request(status, "GET", "/status", timeout=0.3) is None
         if endpoint_stopped and not status_path.exists():
+            LOGGER.info("runtime.stopped", extra={"pid": status.get("pid")})
             return True
         time.sleep(0.2)
     return False
@@ -284,6 +294,7 @@ def serve(foreground: bool = False) -> None:
                 self._send(403, {"error": "unauthorized"})
             else:
                 self._send(200, {"accepted": True})
+                LOGGER.info("runtime.shutdown_requested", extra={"pid": os.getpid()})
                 stop_event.set()
 
         def log_message(self, format: str, *args: object) -> None:
@@ -308,6 +319,10 @@ def serve(foreground: bool = False) -> None:
                 stop_event,
                 shutdown_complete,
             )
+        LOGGER.info(
+            "runtime.serve_started",
+            extra={"pid": os.getpid(), "mode": "foreground" if foreground else "background"},
+        )
         if foreground:
             print("Nika runtime: RUNNING", flush=True)
             print("Close this window to stop Nika safely.", flush=True)
@@ -321,14 +336,21 @@ def serve(foreground: bool = False) -> None:
             server.server_close()
             status_path.unlink(missing_ok=True)
             temporary_path.unlink(missing_ok=True)
+            LOGGER.info("runtime.serve_stopped", extra={"pid": os.getpid()})
         finally:
             stop_event.set()
             shutdown_complete.set()
 
 
 def main() -> None:
+    settings = Settings.from_env()
+    setup_logging(settings)
     if len(sys.argv) == 2 and sys.argv[1] == "--serve":
-        serve()
+        try:
+            serve()
+        except Exception:
+            LOGGER.exception("runtime.process_crashed")
+            raise
     else:
         raise SystemExit("This module is managed by the nika command-line interface.")
 
