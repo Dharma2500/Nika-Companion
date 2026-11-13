@@ -24,6 +24,7 @@ LOGGER = get_logger(__name__)
 
 START_TIMEOUT = 15.0
 STOP_TIMEOUT = 10.0
+START_LOCK_GRACE = START_TIMEOUT + 5.0
 
 
 def _runtime_dir(settings: Settings) -> Path:
@@ -45,7 +46,11 @@ def _read_status(settings: Settings) -> dict[str, Any] | None:
         return None
     if not isinstance(data, dict):
         return None
-    if not isinstance(data.get("port"), int) or not isinstance(data.get("token"), str):
+    if type(data.get("pid")) is not int or data["pid"] <= 0:
+        return None
+    if type(data.get("port")) is not int or not 1 <= data["port"] <= 65535:
+        return None
+    if not isinstance(data.get("token"), str) or not data["token"]:
         return None
     return data
 
@@ -77,9 +82,88 @@ def get_runtime_status(settings: Settings | None = None) -> dict[str, Any] | Non
     if status is None:
         return None
     response = _request(status, "GET", "/status")
-    if response is None or response.get("state") != "running":
+    if (
+        response is None
+        or response.get("state") != "running"
+        or response.get("pid") != status["pid"]
+    ):
         return None
     return response
+
+
+def _acquire_start_lock(settings: Settings) -> int:
+    """Create the startup lock, recovering only locks known to be stale."""
+    lock_path = _lock_path(settings)
+    for _ in range(3):
+        try:
+            return os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as error:
+            try:
+                lock_text = lock_path.read_text(encoding="ascii").strip()
+                lock_pid = int(lock_text)
+            except (OSError, ValueError):
+                try:
+                    lock_age = time.time() - lock_path.stat().st_mtime
+                except FileNotFoundError:
+                    continue
+                if lock_age < START_LOCK_GRACE:
+                    raise RuntimeError(
+                        "Nika is already starting; its startup lock is not ready yet."
+                    ) from error
+            else:
+                if _pid_is_running(lock_pid):
+                    raise RuntimeError("Nika is already starting.") from error
+
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                continue
+
+    raise RuntimeError("Could not acquire Nika's startup lock. Try again.")
+
+
+def _release_start_lock(settings: Settings) -> None:
+    """Remove the startup lock only when it still belongs to this process."""
+    lock_path = _lock_path(settings)
+    try:
+        owner_pid = int(lock_path.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        return
+    if owner_pid == os.getpid():
+        lock_path.unlink(missing_ok=True)
+
+
+def _check_stale_runtime_status(settings: Settings) -> None:
+    """Reject ambiguous live processes and report status left by a crashed one."""
+    status_path = _status_path(settings)
+    if not status_path.exists():
+        return
+
+    status = _read_status(settings)
+    if status is None:
+        raise RuntimeError(
+            f"Nika runtime status file is invalid: {status_path}. "
+            "It was preserved for inspection; refusing to start another instance."
+        )
+
+    response = _request(status, "GET", "/status")
+    if (
+        response is not None
+        and response.get("state") == "running"
+        and response.get("pid") == status["pid"]
+    ):
+        return
+
+    pid = status["pid"]
+    if _pid_is_running(pid):
+        raise RuntimeError(
+            f"Nika runtime process {pid} is still alive, but its control endpoint "
+            "is not responding. Refusing to start another instance."
+        )
+
+    # Keep the stale file until the new runtime atomically replaces it. This avoids
+    # deleting a newer process's status during a concurrent startup.
+    LOGGER.warning("runtime.stale_status_detected", extra={"pid": pid})
 
 
 def start_runtime(settings: Settings | None = None) -> str:
@@ -93,22 +177,20 @@ def start_runtime(settings: Settings | None = None) -> str:
         return "already_running"
 
     LOGGER.info("runtime.start_requested")
-    lock_path = _lock_path(settings)
-    try:
-        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError as error:
-        try:
-            lock_pid = int(lock_path.read_text(encoding="ascii").strip())
-        except (OSError, ValueError):
-            lock_pid = -1
-        if _pid_is_running(lock_pid):
-            raise RuntimeError("Nika is already starting.") from error
-        lock_path.unlink(missing_ok=True)
-        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-
+    descriptor = _acquire_start_lock(settings)
     with os.fdopen(descriptor, "w", encoding="ascii") as lock_file:
         lock_file.write(str(os.getpid()))
 
+    try:
+        if get_runtime_status(settings) is not None:
+            LOGGER.info("runtime.start_skipped", extra={"reason": "already_running"})
+            return "already_running"
+        _check_stale_runtime_status(settings)
+    except Exception:
+        _release_start_lock(settings)
+        raise
+
+    lock_path = _lock_path(settings)
     log_path = settings.data_dir / "logs" / "runtime.jsonl"
     flags = 0
     if os.name == "nt":
@@ -130,18 +212,18 @@ def start_runtime(settings: Settings | None = None) -> str:
             env=child_env,
         )
     except OSError:
-        lock_path.unlink(missing_ok=True)
+        _release_start_lock(settings)
         raise
 
     deadline = time.monotonic() + START_TIMEOUT
     while time.monotonic() < deadline:
         live_status = get_runtime_status(settings)
         if live_status is not None:
-            lock_path.unlink(missing_ok=True)
+            _release_start_lock(settings)
             LOGGER.info("runtime.started", extra={"pid": live_status["pid"]})
             return "started"
         if process.poll() is not None:
-            lock_path.unlink(missing_ok=True)
+            _release_start_lock(settings)
             raise RuntimeError(
                 f"Nika runtime exited during startup. Check the log: {log_path}"
             )
@@ -153,7 +235,7 @@ def start_runtime(settings: Settings | None = None) -> str:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             process.kill()
-    lock_path.unlink(missing_ok=True)
+    _release_start_lock(settings)
     raise RuntimeError(f"Nika runtime did not become ready. Check the log: {log_path}")
 
 
@@ -193,7 +275,8 @@ def _pid_is_running(pid: int) -> bool:
         open_process.restype = ctypes.c_void_p
         handle = open_process(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
-            return False
+            # Access denied means the process exists but cannot be queried.
+            return ctypes.get_last_error() == 5
         try:
             exit_code = ctypes.c_ulong()
             get_exit_code = kernel32.GetExitCodeProcess
