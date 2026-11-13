@@ -183,6 +183,7 @@ def start_runtime(settings: Settings | None = None) -> str:
 
     try:
         if get_runtime_status(settings) is not None:
+            _release_start_lock(settings)
             LOGGER.info("runtime.start_skipped", extra={"reason": "already_running"})
             return "already_running"
         _check_stale_runtime_status(settings)
@@ -190,7 +191,6 @@ def start_runtime(settings: Settings | None = None) -> str:
         _release_start_lock(settings)
         raise
 
-    lock_path = _lock_path(settings)
     log_path = settings.data_dir / "logs" / "runtime.jsonl"
     flags = 0
     if os.name == "nt":
@@ -333,6 +333,20 @@ def serve(foreground: bool = False) -> None:
 
     runtime_dir = _runtime_dir(settings)
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    foreground_lock_owned = False
+    if foreground:
+        descriptor = _acquire_start_lock(settings)
+        with os.fdopen(descriptor, "w", encoding="ascii") as lock_file:
+            lock_file.write(str(os.getpid()))
+        foreground_lock_owned = True
+        try:
+            if get_runtime_status(settings) is not None:
+                raise RuntimeError("Nika is already running. Stop the existing runtime first.")
+            _check_stale_runtime_status(settings)
+        except Exception:
+            _release_start_lock(settings)
+            raise
+
     token = secrets.token_urlsafe(32)
     stop_event = threading.Event()
     shutdown_complete = threading.Event()
@@ -380,20 +394,24 @@ def serve(foreground: bool = False) -> None:
         def log_message(self, format: str, *args: object) -> None:
             return
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    server.daemon_threads = True
-    server.timeout = 0.2
+    server: ThreadingHTTPServer | None = None
     status_path = _status_path(settings)
     temporary_path = status_path.with_suffix(".tmp")
-    status_data = {
-        "pid": os.getpid(),
-        "port": server.server_address[1],
-        "token": token,
-        "started_at": time.time(),
-    }
     try:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        server.timeout = 0.2
+        status_data = {
+            "pid": os.getpid(),
+            "port": server.server_address[1],
+            "token": token,
+            "started_at": time.time(),
+        }
         temporary_path.write_text(json.dumps(status_data), encoding="utf-8")
         os.replace(temporary_path, status_path)
+        if foreground_lock_owned:
+            _release_start_lock(settings)
+            foreground_lock_owned = False
         if foreground and os.name == "nt":
             _console_handler = _install_windows_close_handler(
                 stop_event,
@@ -413,11 +431,14 @@ def serve(foreground: bool = False) -> None:
             print("\nNika runtime: stopping...", flush=True)
     finally:
         try:
-            server.server_close()
+            if server is not None:
+                server.server_close()
             status_path.unlink(missing_ok=True)
             temporary_path.unlink(missing_ok=True)
             LOGGER.info("runtime.serve_stopped", extra={"pid": os.getpid()})
         finally:
+            if foreground_lock_owned:
+                _release_start_lock(settings)
             stop_event.set()
             shutdown_complete.set()
 
