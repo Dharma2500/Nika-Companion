@@ -16,8 +16,10 @@ The default data directory is ~/NIKA_DATA. Set NIKA_DATA to a dedicated path on 
 
 ## Local logs
 
-Structured application logs are stored as JSON Lines in `NIKA_DATA/logs/nika.jsonl`.
-The active file is limited to 2 MiB and up to five rotated files are retained.
+Structured application logs are stored as JSON Lines in `NIKA_DATA/logs/`.
+The CLI writes to `cli.jsonl` and the background service writes to
+`runtime.jsonl`, avoiding cross-process rotation races. Each active file is
+limited to 2 MiB and up to five rotated files are retained.
 Known credential fields and common bearer/API-token formats are redacted before
 records are written. Redaction is defense in depth, not permission to log secrets:
 never place credentials, private chat content, or sensitive world data in log
