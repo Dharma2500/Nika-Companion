@@ -17,7 +17,6 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-
 from nika.config import Settings
 
 START_TIMEOUT = 15.0
@@ -316,7 +315,7 @@ def serve(foreground: bool = False) -> None:
             server.handle_request()
     except KeyboardInterrupt:
         if foreground:
-            print("\\nNika runtime: stopping...", flush=True)
+            print("\nNika runtime: stopping...", flush=True)
     finally:
         try:
             server.server_close()
