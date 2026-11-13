@@ -93,6 +93,7 @@ def get_runtime_status(settings: Settings | None = None) -> dict[str, Any] | Non
 def _acquire_start_lock(settings: Settings) -> int:
     """Acquire an OS-level startup lock that is released automatically on process exit."""
     lock_path = _lock_path(settings)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         if os.fstat(descriptor).st_size == 0:
