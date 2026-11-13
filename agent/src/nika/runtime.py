@@ -109,7 +109,7 @@ def start_runtime(settings: Settings | None = None) -> str:
     with os.fdopen(descriptor, "w", encoding="ascii") as lock_file:
         lock_file.write(str(os.getpid()))
 
-    log_path = settings.data_dir / "logs" / "nika.jsonl"
+    log_path = settings.data_dir / "logs" / "runtime.jsonl"
     flags = 0
     if os.name == "nt":
         flags = subprocess.CREATE_NO_WINDOW
