@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from ctypes import wintypes
+from http.client import HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -69,7 +70,7 @@ def _request(
     try:
         with urlopen(request, timeout=timeout) as response:
             result = json.loads(response.read().decode("utf-8"))
-    except (OSError, URLError, json.JSONDecodeError, ValueError):
+    except (OSError, URLError, HTTPException, json.JSONDecodeError, ValueError):
         return None
     return result if isinstance(result, dict) else None
 
