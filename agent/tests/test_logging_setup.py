@@ -110,3 +110,19 @@ def test_logging_rejects_invalid_rotation_settings(tmp_path: Path) -> None:
         setup_logging(settings, max_bytes=0)
     with pytest.raises(ValueError, match="backup_count"):
         setup_logging(settings, backup_count=-1)
+
+
+
+def test_exception_tracebacks_are_redacted(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    logger = setup_logging(settings)
+    try:
+        raise RuntimeError("provider rejected api_key=exception-secret-value")
+    except RuntimeError:
+        logger.exception("provider request failed")
+
+    log_text = (settings.data_dir / "logs" / "nika.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert "exception-secret-value" not in log_text
+    assert "[REDACTED]" in log_text
