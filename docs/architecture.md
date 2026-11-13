@@ -76,7 +76,7 @@ A fact about one world must not silently become a fact about every world. A reus
 - SQLite uses foreign keys, a busy timeout and WAL mode for local concurrency.
 - Backups and restore verification will be implemented before memory is considered production-safe.
 - NIKA_DATA is outside the Git repository by default.
-- Runtime startup checks stale status metadata and stale startup locks. A status file tied to a live but unresponsive PID is preserved and blocks a second launch; a status file from a dead process is replaced atomically by the next runtime.
+- Runtime startup uses an OS-level file lock held until its authenticated control endpoint is ready. The operating system releases this lock automatically if the starter crashes. Stale status metadata is checked against both the authenticated endpoint and recorded PID; dead-process status is atomically replaced by the next runtime.
 
 ### Operational logs
 
