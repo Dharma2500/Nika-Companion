@@ -69,7 +69,10 @@ def run_start() -> int:
     except (OSError, RuntimeError) as error:
         print(f"Nika start: ERROR ({error})")
         return 1
-    print("Nika runtime: already running" if result == "already_running" else "Nika runtime: started")
+    if result == "already_running":
+        print("Nika runtime: already running")
+    else:
+        print("Nika runtime: started")
     return 0
 
 
