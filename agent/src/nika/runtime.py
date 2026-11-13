@@ -298,6 +298,19 @@ def _pid_is_running(pid: int) -> bool:
             close_handle.argtypes = [ctypes.c_void_p]
             close_handle.restype = ctypes.c_int
             close_handle(handle)
+    if sys.platform.startswith("linux"):
+        try:
+            process_stat = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+            closing_parenthesis = process_stat.rfind(")")
+            if closing_parenthesis >= 0:
+                fields = process_stat[closing_parenthesis + 2 :].split()
+                if fields and fields[0] in {"Z", "X"}:
+                    return False
+        except FileNotFoundError:
+            return False
+        except OSError:
+            pass
+
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
