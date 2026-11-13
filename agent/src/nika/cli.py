@@ -35,7 +35,7 @@ def run_doctor() -> int:
     print("Nika local core: OK")
     print(f"Data directory: {settings.data_dir}")
     print(f"Database: {settings.database_path}")
-    print(f"Logs: {settings.data_dir / 'logs' / 'nika.jsonl'}")
+    print(f"Logs: {settings.data_dir / 'logs'} (cli.jsonl and runtime.jsonl)")
     print(f"SQLite integrity: {'OK' if healthy else 'FAILED'}")
     return 0 if healthy else 1
 
@@ -138,7 +138,7 @@ def main() -> None:
     subparsers.add_parser("stop", help="gracefully stop the local Nika runtime")
 
     args = parser.parse_args()
-    setup_logging()
+    setup_logging(filename="cli.jsonl")
     LOGGER.info("cli.command", extra={"command": args.command or "help"})
     commands = {
         "doctor": run_doctor,
