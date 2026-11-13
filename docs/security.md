@@ -25,6 +25,10 @@ records are written. Redaction is defense in depth, not permission to log secret
 never place credentials, private chat content, or sensitive world data in log
 messages. Treat logs as private local data and never commit or upload them.
 
+## Runtime recovery
+
+A stale runtime status file is not sufficient evidence that the process is still alive. Startup verifies both the authenticated control endpoint and the recorded PID. If the PID is still alive but the endpoint is unresponsive, startup fails closed rather than launching a second process. Invalid status files are preserved for inspection. Stale startup locks are removed only when their recorded process is gone; newly created unreadable locks are given a grace period to avoid racing another launcher.
+
 ## API credentials
 
 Runtime API credentials will be loaded from a local secret store or environment variables in a later implementation. They must never be placed in the Fabric JAR, source files, dashboard frontend, Git history, logs or model prompts.
