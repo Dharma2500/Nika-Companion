@@ -138,11 +138,11 @@ def _release_start_lock(descriptor: int) -> None:
         os.close(descriptor)
 
 
-def _check_stale_runtime_status(settings: Settings) -> None:
+def _check_stale_runtime_status(settings: Settings) -> bool:
     """Reject ambiguous live processes and report status left by a crashed one."""
     status_path = _status_path(settings)
     if not status_path.exists():
-        return
+        return False
 
     status = _read_status(settings)
     if status is None:
@@ -157,7 +157,7 @@ def _check_stale_runtime_status(settings: Settings) -> None:
         and response.get("state") == "running"
         and response.get("pid") == status["pid"]
     ):
-        return
+        return True
 
     pid = status["pid"]
     if _pid_is_running(pid):
@@ -169,6 +169,7 @@ def _check_stale_runtime_status(settings: Settings) -> None:
     # Keep the stale file until the new runtime atomically replaces it. This avoids
     # deleting a newer process's status during a concurrent startup.
     LOGGER.warning("runtime.stale_status_detected", extra={"pid": pid})
+    return False
 
 
 def start_runtime(settings: Settings | None = None) -> str:
@@ -188,7 +189,10 @@ def start_runtime(settings: Settings | None = None) -> str:
             _release_start_lock(descriptor)
             LOGGER.info("runtime.start_skipped", extra={"reason": "already_running"})
             return "already_running"
-        _check_stale_runtime_status(settings)
+        if _check_stale_runtime_status(settings):
+            _release_start_lock(descriptor)
+            LOGGER.info("runtime.start_skipped", extra={"reason": "already_running"})
+            return "already_running"
     except Exception:
         _release_start_lock(descriptor)
         raise
@@ -341,7 +345,10 @@ def serve(foreground: bool = False) -> None:
         try:
             if get_runtime_status(settings) is not None:
                 raise RuntimeError("Nika is already running. Stop the existing runtime first.")
-            _check_stale_runtime_status(settings)
+            if _check_stale_runtime_status(settings):
+                raise RuntimeError(
+                    "Nika is already running. Stop the existing runtime first."
+                )
         except Exception:
             _release_start_lock(foreground_lock_descriptor)
             foreground_lock_descriptor = None
