@@ -59,7 +59,7 @@ _KNOWN_TOKEN_FORMATS = (
 )
 
 _STANDARD_RECORD_FIELDS = frozenset(
-    logging.makeLogRecord({}).__dict__
+    set(logging.makeLogRecord({}).__dict__)
     | {
         "message",
         "asctime",
