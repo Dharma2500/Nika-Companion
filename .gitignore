@@ -221,6 +221,7 @@ __marimo__/
 
 
 # Nika local runtime data and secrets
+*.jsonl
 NIKA_DATA/
 nika_data/
 *.sqlite
