@@ -35,7 +35,7 @@ From this directory:
 The remapped mod JAR is written to:
 
 ```
-build/libs/nika-companion-0.5.0.jar
+build/libs/nika-companion-0.5.1.jar
 ```
 
 Copy that JAR and a matching Fabric API build into the `mods` folder of the Fabric 1.21.11 game profile.
