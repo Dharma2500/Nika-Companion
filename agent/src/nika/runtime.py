@@ -8,6 +8,7 @@ import hmac
 import json
 import os
 import secrets
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -726,7 +727,7 @@ def serve(foreground: bool = False) -> None:
                             payload=observation,
                         )
                     )
-                except Exception:
+                except sqlite3.Error:
                     LOGGER.exception("runtime.observation_persist_failed")
                     self._send(503, {"error": "observation_persistence_failed"})
                     return
