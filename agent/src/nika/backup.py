@@ -112,6 +112,7 @@ class BackupManager:
         )
         safety_dir: Path | None = None
         temporary_path: Path | None = None
+        database_replaced = False
 
         try:
             descriptor, temporary_name = tempfile.mkstemp(
@@ -140,6 +141,7 @@ class BackupManager:
 
             os.replace(temporary_path, database_path)
             temporary_path = None
+            database_replaced = True
 
             if not self.verify_backup(database_path):
                 raise sqlite3.DatabaseError(
@@ -158,6 +160,7 @@ class BackupManager:
                         database_path,
                         sidecars,
                         safety_dir,
+                        restore_database=database_replaced,
                     )
                 elif not had_original_files:
                     database_path.unlink(missing_ok=True)
@@ -230,13 +233,15 @@ class BackupManager:
         database_path: Path,
         sidecars: list[Path],
         safety_dir: Path,
+        *,
+        restore_database: bool,
     ) -> None:
-        """Put the exact pre-restore files back after a failed database swap."""
+        """Put pre-restore files back after a failed database swap."""
         for sidecar in sidecars:
             sidecar.unlink(missing_ok=True)
 
         original_database = safety_dir / database_path.name
-        if original_database.is_file():
+        if restore_database and original_database.is_file():
             descriptor, temporary_name = tempfile.mkstemp(
                 prefix=f".{database_path.name}.rollback-",
                 suffix=".tmp",
@@ -249,7 +254,7 @@ class BackupManager:
                 os.replace(temporary_path, database_path)
             finally:
                 temporary_path.unlink(missing_ok=True)
-        else:
+        elif restore_database:
             database_path.unlink(missing_ok=True)
 
         for sidecar in sidecars:
