@@ -27,8 +27,8 @@ import java.util.Map;
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
-    private static final String MOD_VERSION = "0.2.0";
-    private static final int OBSERVATION_SCHEMA_VERSION = 2;
+    private static final String MOD_VERSION = "0.3.0";
+    private static final int OBSERVATION_SCHEMA_VERSION = 3;
     private static final int BLOCK_SAMPLE_RADIUS_XZ = 2;
     private static final int BLOCK_SAMPLE_RADIUS_Y = 1;
     private static final int MAX_BLOCK_SAMPLE_BLOCKS = 32;
@@ -103,6 +103,32 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             "dimension", client.level.dimension().identifier().toString()
                         );
                         world.add("block_sample", collectBlockSample(client));
+
+                        BlockPos playerPosition = client.player.blockPosition();
+                        if (!client.level.hasChunkAt(playerPosition)) {
+                            context.getSource().sendFeedback(
+                                Component.literal("Nika: the player chunk is not loaded yet. Retry in a moment.")
+                            );
+                            return 0;
+                        }
+
+                        JsonObject environment = new JsonObject();
+                        String biomeId = client.level.getBiome(playerPosition)
+                            .unwrapKey()
+                            .map(key -> key.location().toString())
+                            .orElse("unknown:unknown");
+                        environment.addProperty("biome", biomeId);
+                        environment.addProperty(
+                            "time_of_day_ticks",
+                            (int) Math.floorMod(client.level.getDayTime(), 24000L)
+                        );
+                        environment.addProperty("raining", client.level.isRaining());
+                        environment.addProperty("thundering", client.level.isThundering());
+                        environment.addProperty(
+                            "light_level",
+                            client.level.getMaxLocalRawBrightness(playerPosition)
+                        );
+                        world.add("environment", environment);
                         observation.add("world", world);
 
                         JsonObject player = new JsonObject();
@@ -119,6 +145,14 @@ public final class NikaCompanionClient implements ClientModInitializer {
                                 client.player.getInventory().getSelectedItem().getItem()
                             ).toString()
                         );
+
+                        JsonObject playerState = new JsonObject();
+                        playerState.addProperty("game_mode", client.player.gameMode().getName());
+                        playerState.addProperty("on_ground", client.player.onGround());
+                        playerState.addProperty("sprinting", client.player.isSprinting());
+                        playerState.addProperty("swimming", client.player.isSwimming());
+                        playerState.addProperty("crouching", client.player.isCrouching());
+                        player.add("state", playerState);
                         observation.add("player", player);
 
                         context.getSource().sendFeedback(
