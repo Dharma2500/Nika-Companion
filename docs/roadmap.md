@@ -55,10 +55,10 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Preserve v1 validation and event compatibility while persisting versioned v1/v2 event types
 - [x] Verify v2 block-state observation and SQLite persistence on Vitaly's Windows machine
 - [x] Document the client capability inventory and verify candidate API fields against Minecraft 1.21.11 mappings
-- [ ] Implement observation schema v3: local biome, time/weather, light level, game mode and one-shot movement state
-  - [ ] Preserve manual-only collection, loaded-position guards and the 8 KiB payload ceiling
-  - [ ] Keep v1/v2 validation and persistence compatibility
-  - [ ] Add strict v3 JSON Schema, Python validation tests and Fabric payload implementation
+- [x] Implement observation schema v3: local biome, time/weather, light level, game mode and one-shot movement state (Fabric and Python CI verified)
+  - [x] Preserve manual-only collection, loaded-position guards and the 8 KiB payload ceiling
+  - [x] Keep v1/v2 validation and persistence compatibility
+  - [x] Add strict v3 JSON Schema, Python validation tests and Fabric payload implementation
   - [ ] Verify v3 observation and SQLite persistence on Vitaly's Windows machine
 - [ ] Client-only companion renderer
 - [ ] Action-request authentication, capability validation and approval gates
