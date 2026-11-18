@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from nika.backup import BackupManager
-from nika.database import Database
+from nika.database import SCHEMA_VERSION, Database, _MIGRATION_1
 
 
 def test_backup_is_created_and_verified(tmp_path: Path) -> None:
@@ -259,3 +259,66 @@ def test_restore_rolls_back_after_post_install_validation_failure(
         manager.restore_backup(backup_path)
 
     assert _event_rows(database) == ["later", "original"]
+
+
+def test_restore_migrates_v1_backup_without_modifying_source(
+    tmp_path: Path,
+) -> None:
+    database = Database(tmp_path / "active" / "nika.sqlite3")
+    database.initialize()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("active-row", "2026-01-02T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+
+    legacy_path = tmp_path / "legacy-v1.sqlite3"
+    legacy_connection = sqlite3.connect(legacy_path)
+    try:
+        for statement in _MIGRATION_1:
+            legacy_connection.execute(statement)
+        legacy_connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("legacy-event", "2026-01-01T00:00:00+00:00", "test", "legacy", "{}"),
+        )
+        legacy_connection.execute(
+            """INSERT INTO memories (
+                memory_id, created_at, updated_at, category, content, source, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "legacy-memory",
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+                "preference",
+                "Виталий предпочитает русский язык.",
+                "legacy-import",
+                0.9,
+            ),
+        )
+        legacy_connection.execute("PRAGMA user_version = 1")
+        legacy_connection.commit()
+    finally:
+        legacy_connection.close()
+
+    manager = BackupManager(database, tmp_path / "backups")
+    assert manager.verify_backup(legacy_path)
+    assert manager._schema_version(legacy_path) == 1
+
+    safety_path = manager.restore_backup(legacy_path)
+
+    assert safety_path is not None
+    assert _event_rows(database) == ["legacy-event"]
+    with database.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        memory = connection.execute(
+            "SELECT content, provenance_type, scope FROM memories "
+            "WHERE memory_id = 'legacy-memory'"
+        ).fetchone()
+    assert memory is not None
+    assert memory["content"] == "Виталий предпочитает русский язык."
+    assert memory["provenance_type"] == "hypothesis"
+    assert memory["scope"] == "global"
+
+    # The original v1 backup is a recovery artifact and must remain unchanged.
+    assert manager._schema_version(legacy_path) == 1
+    assert manager.verify_backup(legacy_path)
