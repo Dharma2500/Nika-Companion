@@ -188,7 +188,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
                     })
                     .then(ClientCommandManager.literal("on")
                         .executes(context -> {
-                            CompanionRenderer.setEnabled(true);
+                            CompanionRenderer.summon();
                             context.getSource().sendFeedback(
                                 Component.literal("Nika: companion enabled for this client.")
                             );
@@ -196,7 +196,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
                         }))
                     .then(ClientCommandManager.literal("off")
                         .executes(context -> {
-                            CompanionRenderer.setEnabled(false);
+                            CompanionRenderer.dismiss();
                             context.getSource().sendFeedback(
                                 Component.literal("Nika: companion disabled for this client.")
                             );
