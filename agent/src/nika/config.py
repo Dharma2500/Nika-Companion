@@ -150,7 +150,7 @@ def _check_directory(
         )
         return
 
-    if not os.access(candidate, os.R_OK | os.W_OK | os.X_OK):
+    if not os.access(candidate, os.R_OK | os.W_OK):
         findings.append(
             ConfigDiagnostic(
                 "ERROR",
