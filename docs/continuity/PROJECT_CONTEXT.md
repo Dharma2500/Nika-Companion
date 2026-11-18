@@ -235,7 +235,7 @@ Validation:
 - Fabric build run 44409120014: success. No new JAR was required because this milestone changed only Python and documentation.
 - Provider adapter is CI-verified, but a real LM Studio connection is NOT yet verified.
 
-Next: verify the actual LM Studio host and model ID on the machine running Nika. Check the local `/v1/models` endpoint and use its exact model ID. Configure the three environment variables only locally, never in Git. Then implement authenticated `POST /bridge/v1/chat`, persist the user message before model work, assemble ContextBuilder output, persist the assistant reply and return it to the Fabric client. Finally implement ordinary private chat using Fabric's outgoing-chat allow event, a configurable key binding to toggle public server chat, local-only replies and slash-command passthrough.
+Next: verify the actual LM Studio host/model ID on the PC running Nika, configure environment variables locally, restart runtime and confirm hello advertises dialogue.chat. Then test v0.5.0 private chat in Minecraft: no server leakage while capability is available, N toggles public server chat, slash commands pass through, and provider-offline mode falls back to server chat with a local warning.
 
 ## 6.3 Authenticated plain-text chat implemented in v0.5.0 (2026-11-19)
 
