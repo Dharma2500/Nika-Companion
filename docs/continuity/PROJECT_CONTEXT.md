@@ -36,7 +36,7 @@ Purpose: this file is the authoritative handoff for continuing Nika-Companion af
 - PR target: `main`
 - PR state: open, draft. Do not merge without approval.
 - Main branch has not been changed by the companion-renderer feature work.
-- Latest known project commit before this continuity update: `546c6e04faa7d43293f449b4dea70d212406cfe7`
+- Latest known project commit before this continuity update: `1925276a1e6e1fa294d27f62faffe4a6b87ab3b6`
 - Latest delivered mod: v0.4.5.
 - v0.4.5 Fabric workflow: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839400
 - v0.4.5 Python CI: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839669
@@ -146,6 +146,35 @@ Vitaly wants a full project handoff saved in GitHub after every assistant answer
 - Keep `docs/continuity/CHAT_LOG.md` as a concise append-only chronological record of decisions, completed work, delivered artifacts and next tasks.
 - Update both after every substantive Nika project response.
 - The handoff must contain enough context that a fresh assistant can continue without asking Vitaly to repeat requirements.
+
+
+## 6.1 Nika Intelligence foundation implemented on 2026-11-19
+
+Current implementation is in the same feature branch and PR #1 (still draft). Files:
+- `agent/src/nika/database.py`: schema version 2; migration 1 is retained; migration 2 adds conversation tables and provenance/scope/tags columns to memories.
+- `agent/src/nika/memory.py`: typed `MemoryStore` and `ConversationStore`.
+- `agent/src/nika/context.py`: deterministic `ContextBuilder` with personality constitution, recent history, relevant memories and a 12 KiB UTF-8 byte budget.
+- Tests: `agent/tests/test_database.py`, `agent/tests/test_memory.py`, `agent/tests/test_context.py`.
+- Design: `docs/memory-dialogue-design.md`; implementation checklist: `docs/roadmap.md`; architecture: `docs/architecture.md`.
+
+Schema v2 details:
+- Adds `conversations` and `conversation_messages` with foreign keys, roles, content bounds, metadata and unique request_id.
+- Extends `memories` with `provenance_type`, `scope`, `world_id`, `tags_json`.
+- Legacy v1 memories are migrated with provenance `hypothesis`, not `user_taught` or `verified`.
+- New MemoryInput also defaults to cautious `hypothesis`; explicit `user_taught` must be supplied when origin is known.
+- Memory search is currently bounded keyword retrieval (up to 512 candidates) and Python Unicode casefolding; no embeddings yet.
+- ConversationStore persists messages, returns chronological recent history, caps user input at 4,000 chars and supports request-id idempotency.
+- ContextBuilder uses up to 12 recent messages and 6 relevant memories, drops oldest history/lowest-ranked memories first, and enforces a hard 12 KiB package budget. It explicitly returns `world_context: null` until a freshness/scope contract is implemented.
+
+Validation:
+- Earlier CI attempt failed only on test import sorting; fixed by sorting `ContextBuilder` before `ContextBuildError`.
+- Earlier intermediate run caught the legacy provenance expectation during the change from `user_taught` to `hypothesis`; test and docs were updated.
+- Latest runs for current branch head `1925276a1e6e1fa294d27f62faffe4a6b87ab3b6`:
+  - Python CI run 44407374264: in progress at context update.
+  - Fabric client mod build run 44407374206: in progress at context update.
+- Do not claim current commit is CI-verified until both latest runs complete successfully.
+
+After CI succeeds, next step is provider manager configuration and a tested local OpenAI-compatible endpoint. No endpoint/model name should be assumed until verified on the actual Nika machine. Chat endpoint and Fabric plain-text routing follow later.
 
 ## 7. Next development milestone: Nika Intelligence 0.5.x
 
