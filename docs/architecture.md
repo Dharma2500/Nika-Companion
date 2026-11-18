@@ -125,24 +125,25 @@ No component may claim that an unknown task can be solved offline without a matc
 The in-game avatar for Nika uses the vanilla Minecraft entity called
 "Тихоня" (Allay). This supersedes the earlier alt-style avatar concept.
 
-The v0.4.1 renderer creates a client-side Allay object and submits its
+The v0.4.2 renderer creates a client-side Allay object and submits its
 vanilla render state through Fabric's world-render event and Minecraft's entity
 render dispatcher. The object is never added to ClientLevel, never synchronized
 with a server, and is not visible to other players. AI and gravity are disabled;
-the object is only a visual representation.
+the object is a visual-only representation.
 
-Summoning is available through /nika or /ника. Dismissal is available through
-/nika dismiss or /ника уйди. The local bridge performs an authenticated
-handshake automatically and retries at a bounded five-second interval, so
-manual /nika connect is only a diagnostic fallback.
+Summoning uses /nika and dismissal uses /nika dismiss. The local bridge performs
+an authenticated handshake automatically and retries at a bounded five-second
+interval, so manual /nika connect is only a diagnostic fallback.
 
-The follow target is based on actual horizontal player displacement rather than
-camera yaw. While the player moves, Nika tracks to the right and behind the
-travel direction. When horizontal movement stops, her X/Z anchor stays fixed
-while the player rotates the camera to look at her; vertical position still
-tracks jumps and falls. A damped spring supplies smooth acceleration and
-deceleration, with a long-distance recovery threshold. The in-memory Allay
-object is discarded when the player leaves the world or changes dimensions.
+The follow target uses filtered horizontal player displacement, never camera
+yaw. While the player moves, Nika tracks to the right and behind the travel
+direction. When horizontal movement stops, a world-space idle anchor prevents
+her from circling the player when the camera turns. A stable damped spring
+smooths position changes. Body yaw and head yaw are interpolated independently;
+the head can look at the player or make occasional short glances. Small,
+infrequent idle offsets keep her gently moving near the anchor without leaving
+conversation range. The Allay instance is discarded when the player leaves the
+world or changes dimensions.
 
 No custom entity type, server registration, pathfinding, collision, item pickup,
 or world interaction is part of this renderer. The milestone remains incomplete
