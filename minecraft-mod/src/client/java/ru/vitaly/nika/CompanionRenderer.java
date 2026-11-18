@@ -30,11 +30,12 @@ final class CompanionRenderer {
     private static final double MOVEMENT_THRESHOLD_SQUARED = 0.0004;
     private static final double TELEPORT_DISTANCE = 12.0;
 
-    // Acceleration-limited steering gives Nika real momentum: she needs time
-    // to build speed and to brake, instead of staying locked to a fixed offset.
-    private static final double MAX_FOLLOW_SPEED = 0.40;
-    private static final double FOLLOW_ACCELERATION = 0.045;
-    private static final double ARRIVAL_DISTANCE = 0.035;
+    // Critically damped follow in real-time units (blocks/second).
+    // The spring has no oscillation and eases both acceleration and braking.
+    private static final double FOLLOW_SMOOTH_TIME = 0.38;
+    private static final double MAX_FOLLOW_SPEED = 7.0;
+    private static final double TICK_SECONDS = 1.0 / 20.0;
+    private static final double ARRIVAL_DISTANCE = 0.025;
 
     private static final double IDLE_WANDER_MIN_RADIUS = 0.10;
     private static final double IDLE_WANDER_MAX_RADIUS = 0.30;
@@ -234,13 +235,13 @@ final class CompanionRenderer {
     }
 
     /**
-     * Acceleration-limited velocity steering:
-     * - desired speed grows with the distance to the target;
-     * - braking distance lets Nika ease in instead of snapping to the target;
-     * - velocity can only change by a small amount on each client tick.
+     * Critically damped spring integration (the same family of controller used
+     * by SmoothDamp): velocity is stored in blocks/second and the timestep is
+     * expressed in seconds. Unlike the previous steering controller, it does
+     * not repeatedly rotate a capped velocity vector toward a moving target.
      *
-     * The result is visible momentum: she falls behind when the player starts
-     * moving or changes direction, then smoothly accelerates to catch up.
+     * This gives Nika a continuous trajectory when the player accelerates,
+     * stops or changes direction, while the damping prevents overshoot.
      */
     private static void updateFollowMotion() {
         if (smoothedPosition == null) {
@@ -257,26 +258,26 @@ final class CompanionRenderer {
             return;
         }
 
-        double remainingDistance = Math.max(0.0, distance - ARRIVAL_DISTANCE);
-        double desiredSpeed = Math.min(
-            MAX_FOLLOW_SPEED,
-            Math.sqrt(2.0 * FOLLOW_ACCELERATION * remainingDistance)
-        );
+        double smoothTime = FOLLOW_SMOOTH_TIME;
+        double omega = 2.0 / smoothTime;
+        double x = omega * TICK_SECONDS;
+        double exponential = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
 
-        Vec3 desiredVelocity = distance > 1.0E-6
-            ? displacement.scale(desiredSpeed / distance)
-            : Vec3.ZERO;
-
-        Vec3 velocityChange = desiredVelocity.subtract(followVelocity);
-        double velocityChangeLength = velocityChange.length();
-        if (velocityChangeLength > FOLLOW_ACCELERATION) {
-            velocityChange = velocityChange.scale(FOLLOW_ACCELERATION / velocityChangeLength);
+        // Clamp the spring's working target to a finite catch-up speed without
+        // changing the actual target or injecting a per-tick velocity impulse.
+        double maxChange = MAX_FOLLOW_SPEED * smoothTime;
+        Vec3 change = smoothedPosition.subtract(desiredPosition);
+        double changeLength = change.length();
+        if (changeLength > maxChange) {
+            change = change.scale(maxChange / changeLength);
         }
-        followVelocity = followVelocity.add(velocityChange);
+        Vec3 clampedTarget = smoothedPosition.subtract(change);
 
-        smoothedPosition = smoothedPosition.add(followVelocity);
+        Vec3 temp = followVelocity.add(change.scale(omega)).scale(TICK_SECONDS);
+        followVelocity = followVelocity.subtract(temp.scale(omega)).scale(exponential);
+        smoothedPosition = clampedTarget.add(change.add(temp).scale(exponential));
 
-        if (distance < ARRIVAL_DISTANCE && followVelocity.lengthSqr() < 0.0004) {
+        if (distance < ARRIVAL_DISTANCE && followVelocity.lengthSqr() < 0.0001) {
             smoothedPosition = desiredPosition;
             followVelocity = Vec3.ZERO;
         }
