@@ -107,6 +107,12 @@ def _acquire_start_lock(settings: Settings) -> int:
         wait_for_single_object = kernel32.WaitForSingleObject
         wait_for_single_object.argtypes = [wintypes.HANDLE, wintypes.DWORD]
         wait_for_single_object.restype = wintypes.DWORD
+        release_mutex = kernel32.ReleaseMutex
+        release_mutex.argtypes = [wintypes.HANDLE]
+        release_mutex.restype = wintypes.BOOL
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+        close_handle.restype = wintypes.BOOL
 
         lock_identity = str(lock_path.resolve()).casefold().encode("utf-8")
         mutex_name = (
@@ -118,16 +124,17 @@ def _acquire_start_lock(settings: Settings) -> int:
 
         wait_result = wait_for_single_object(handle, 0)
         if wait_result not in (0x00000000, 0x00000080):  # OBJECT_0 or ABANDONED
-            kernel32.CloseHandle(handle)
+            winerror = ctypes.get_last_error()
+            close_handle(handle)
             if wait_result == 0x00000102:  # WAIT_TIMEOUT
                 raise RuntimeError("Nika is already starting.")
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise ctypes.WinError(winerror)
 
         try:
             lock_path.write_text(str(os.getpid()), encoding="ascii")
         except Exception:
-            kernel32.ReleaseMutex(handle)
-            kernel32.CloseHandle(handle)
+            release_mutex(handle)
+            close_handle(handle)
             raise
         return int(handle)
 
