@@ -182,9 +182,9 @@ Visual companion acceptance still required:
 8. Skills/planning/permissioned actions much later; no autonomous world-changing behavior until action auth, capability checks, approval gates, emergency stop and disposable-world tests exist.
 
 CI status for the dashboard implementation:
-- Fabric v0.5.1 run #142 succeeded and uploaded artifact ID `14482470879`.
-- Python CI run #358 succeeded on all six OS/Python matrix jobs; each job ran 159 tests successfully. The dependent source-overlay archive also succeeded (artifact ID `14481548796`).
-- The dashboard source is on the feature branch head `0a83e9eabd63b1ab03b6bd2c8ffd9049dbcbbecb`. The next docs-only commits preserve that validated source tree.
+- Fabric v0.5.1 run #146 succeeded and uploaded artifact ID `14481902637`.
+- Python CI run #362 succeeded on all six OS/Python matrix jobs; each job ran 159 tests successfully. Ruff and compileall passed; the dependent source-overlay archive also succeeded.
+- The dashboard source is on the validated feature branch head preceding this documentation update. The latest run #362 also validates the CLI wording correction.
 
 ## 9. Secrets and local configuration
 
@@ -342,7 +342,7 @@ The recovery check also corrected conflicting handoff documentation without touc
 ### Validation
 - Added a runtime test for dashboard page/CSP, unauthorized API access, authenticated single-use ticket exchange, Origin rejection, cookie properties, redacted status response and replay rejection.
 - Added a CLI test for automatic runtime start and browser launch without printing the one-time ticket.
-- Latest Python CI run #358: all six Python 3.11/3.12/3.13 × Ubuntu/Windows jobs passed; each job ran 159 tests; compileall and Ruff passed. The source overlay artifact also uploaded successfully.
-- Latest Fabric build #142 succeeded and uploaded artifact ID 14482470879. No Minecraft client mod source changed in this dashboard milestone.
+- Latest Python CI run #362: all six Python 3.11/3.12/3.13 × Ubuntu/Windows jobs passed; each job ran 159 tests; compileall and Ruff passed. The source overlay artifact also uploaded successfully.
+- Latest Fabric build #146 succeeded and uploaded artifact ID 14481902637. No Minecraft client mod source changed in this dashboard milestone.
 - The automated tests verify HTTP/session behavior but do not replace a manual browser test on Vitaly's Windows PC.
 - The earlier failed lint runs #354 and #356 exposed long inline page lines and an import-order issue. These were corrected; current source commit 0a83e9e... passed the latest CI.
