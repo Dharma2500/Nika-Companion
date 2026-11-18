@@ -27,7 +27,7 @@ import java.util.Map;
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
-    private static final String MOD_VERSION = "0.4.2";
+    private static final String MOD_VERSION = "0.5.0";
     private static final int OBSERVATION_SCHEMA_VERSION = 3;
     private static final int BLOCK_SAMPLE_RADIUS_XZ = 2;
     private static final int BLOCK_SAMPLE_RADIUS_Y = 1;
@@ -38,6 +38,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         CompanionRenderer.initialize();
+        NikaChatClient.initialize();
         BridgeClient.ensureConnected();
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(
             client -> BridgeClient.ensureConnected()
@@ -47,12 +48,16 @@ public final class NikaCompanionClient implements ClientModInitializer {
             var nikaCommand = ClientCommandManager.literal("nika")
                 .executes(context -> {
                     CompanionRenderer.summon();
-                    context.getSource().sendFeedback(Component.literal("Ника: я рядом."));
+                    NikaChatClient.setPrivateMode(true);
+                    context.getSource().sendFeedback(
+                        Component.literal("Ника: я рядом. Обычные сообщения можно писать прямо в чат.")
+                    );
                     return 1;
                 })
                 .then(ClientCommandManager.literal("dismiss")
                     .executes(context -> {
                         CompanionRenderer.dismiss();
+                        NikaChatClient.setPrivateMode(false);
                         context.getSource().sendFeedback(Component.literal("Ника: я отойду."));
                         return 1;
                     }))
@@ -70,7 +75,8 @@ public final class NikaCompanionClient implements ClientModInitializer {
                                 MINECRAFT_VERSION,
                                 BridgeClient.getLastStatus(),
                                 BridgeClient.getLastObservationStatus(),
-                                CompanionRenderer.isEnabled() ? "summoned" : "hidden"
+                                CompanionRenderer.isEnabled() ? "summoned" : "hidden",
+                                NikaChatClient.getStatus()
                             );
                         context.getSource().sendFeedback(Component.literal(status));
                         return 1;
