@@ -19,3 +19,13 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Inspected current database/runtime: SQLite schema v1 already includes `memories`, `skills`, `world_facts`, and `event_log`; no conversation table, Memory API, ContextBuilder, LLM provider or chat endpoint exists yet.
 - Created design baseline in `docs/memory-dialogue-design.md`.
 - Next: schema migration v2, ConversationStore, MemoryStore, ContextBuilder, tests, then local provider and authenticated chat route. Voice remains deferred.
+
+## 2026-11-19: memory and context foundation implementation
+
+- Added SQLite migration v2 with `conversations`, `conversation_messages`, memory provenance/scope/tags. Existing v1 memory rows migrate to cautious `hypothesis`.
+- Added typed `MemoryStore` and `ConversationStore`; conversation messages support idempotent request IDs.
+- Added deterministic `ContextBuilder` with Nika constitution, up to 12 recent turns, up to 6 relevant memories, a hard 12 KiB UTF-8 budget and no stale world context.
+- Memory keyword retrieval is bounded and Unicode-casefolded, including Russian text.
+- Updated architecture, roadmap, README and the project continuity handoff.
+- Plain Minecraft dialogue still remains unimplemented: no local provider integration, no `/bridge/v1/chat`, no client chat interception yet. The user requirement remains ordinary unprefixed text, private routing by default while Nika is summoned, keybind toggle for server chat, and slash commands untouched.
+- Current validation is running on the latest feature branch head. Check GitHub Actions before calling the milestone green.
