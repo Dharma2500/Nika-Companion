@@ -21,7 +21,7 @@ The project is built in small, testable layers. The local agent and persistent m
 | Persistent SQLite memory | Initial schema and event journal |
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
-| Fabric 1.21.11 client mod | Client-only mod; `/nika status` and authenticated read-only bridge v1 `/nika connect`; CI and local Windows handshake verified |
+| Fabric 1.21.11 client mod | Client-only mod; `/nika status`, `/nika connect` and manual `/nika observe`; Fabric CI and local handshake verified, observation test pending |
 | Python ↔ Minecraft protocol | Authenticated handshake and one-shot `/nika observe` implemented; strict v1 validation and SQLite event persistence; CI/local game verification pending |
 | Dashboard, voice, external AI | Planned, not required for local core |
 
