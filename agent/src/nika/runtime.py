@@ -24,7 +24,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from nika.config import Settings
-from nika.context import ContextBuildError, ContextBuilder
+from nika.context import ContextBuilder, ContextBuildError
 from nika.database import Database
 from nika.dialogue import (
     MAX_CHAT_REQUEST_BYTES,
