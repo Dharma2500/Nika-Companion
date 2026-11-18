@@ -86,7 +86,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
 
                         JsonObject world = new JsonObject();
                         world.addProperty(
-                            "dimension", client.level.dimension().location().toString()
+                            "dimension", client.level.dimension().identifier().toString()
                         );
                         observation.add("world", world);
 
