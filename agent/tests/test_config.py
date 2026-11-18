@@ -98,7 +98,6 @@ def test_database_path_cannot_equal_data_directory(tmp_path: Path) -> None:
     )
 
 
-
 def test_service_directory_must_not_be_a_file(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
