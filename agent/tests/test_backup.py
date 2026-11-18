@@ -1,3 +1,5 @@
+import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -70,3 +72,156 @@ def test_backup_requires_existing_database(tmp_path: Path) -> None:
 def test_backup_manager_rejects_zero_retention(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="retention"):
         BackupManager(Database(tmp_path / "nika.sqlite3"), tmp_path / "backups", 0)
+
+
+
+def _event_rows(database: Database) -> list[str]:
+    connection = sqlite3.connect(database.path)
+    try:
+        return [
+            row[0]
+            for row in connection.execute(
+                "SELECT event_id FROM event_log ORDER BY event_id"
+            ).fetchall()
+        ]
+    finally:
+        connection.close()
+
+
+def test_restore_backup_preserves_pre_restore_database(tmp_path: Path) -> None:
+    database = Database(tmp_path / "data" / "nika.sqlite3")
+    database.initialize()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("event-before", "2026-01-01T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+
+    manager = BackupManager(database, tmp_path / "backups")
+    backup_path = manager.create_backup()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("event-after", "2026-01-02T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+
+    safety_path = manager.restore_backup(backup_path)
+
+    assert safety_path is not None
+    assert safety_path.is_dir()
+    assert (safety_path / "manifest.json").is_file()
+    assert _event_rows(database) == ["event-before"]
+
+    safety_database = Database(safety_path / database.path.name)
+    assert _event_rows(safety_database) == ["event-after", "event-before"]
+
+
+def test_restore_removes_old_sidecars_and_preserves_them_in_safety_copy(
+    tmp_path: Path,
+) -> None:
+    database = Database(tmp_path / "data" / "nika.sqlite3")
+    database.initialize()
+    manager = BackupManager(database, tmp_path / "backups")
+    backup_path = manager.create_backup()
+
+    sidecars = [
+        Path(f"{database.path}-wal"),
+        Path(f"{database.path}-shm"),
+        Path(f"{database.path}-journal"),
+    ]
+    expected: dict[str, bytes] = {}
+    for index, sidecar in enumerate(sidecars):
+        payload = f"old-sidecar-{index}".encode()
+        sidecar.write_bytes(payload)
+        expected[sidecar.name] = payload
+
+    safety_path = manager.restore_backup(backup_path)
+
+    assert safety_path is not None
+    for sidecar in sidecars:
+        assert not sidecar.exists()
+        assert (safety_path / sidecar.name).read_bytes() == expected[sidecar.name]
+    assert manager.verify_backup(database.path)
+
+
+def test_restore_rejects_invalid_source_without_changing_database(
+    tmp_path: Path,
+) -> None:
+    database = Database(tmp_path / "nika.sqlite3")
+    database.initialize()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("keep-me", "2026-01-01T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+    manager = BackupManager(database, tmp_path / "backups")
+    invalid_backup = tmp_path / "invalid.sqlite3"
+    invalid_backup.write_bytes(b"not a sqlite database")
+
+    with pytest.raises(sqlite3.DatabaseError):
+        manager.restore_backup(invalid_backup)
+
+    assert _event_rows(database) == ["keep-me"]
+    assert not (tmp_path / "backups" / "restore-safety").exists()
+
+
+def test_restore_rejects_incompatible_schema_without_changing_database(
+    tmp_path: Path,
+) -> None:
+    database = Database(tmp_path / "nika.sqlite3")
+    database.initialize()
+    manager = BackupManager(database, tmp_path / "backups")
+    backup_path = manager.create_backup()
+
+    connection = sqlite3.connect(backup_path)
+    try:
+        connection.execute("PRAGMA user_version = 0")
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(RuntimeError, match="requires schema"):
+        manager.restore_backup(backup_path)
+
+    assert manager.verify_backup(database.path)
+    assert not (tmp_path / "backups" / "restore-safety").exists()
+
+
+def test_restore_rolls_back_when_atomic_swap_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    database = Database(tmp_path / "nika.sqlite3")
+    database.initialize()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("before-backup", "2026-01-01T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+    manager = BackupManager(database, tmp_path / "backups")
+    backup_path = manager.create_backup()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("keep-after-failure", "2026-01-02T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+
+    real_replace = os.replace
+    failed = False
+
+    def fail_database_swap(source, destination):
+        nonlocal failed
+        if Path(destination) == database.path and not failed:
+            failed = True
+            raise OSError("simulated atomic swap failure")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr("nika.backup.os.replace", fail_database_swap)
+
+    with pytest.raises(OSError, match="simulated atomic swap failure"):
+        manager.restore_backup(backup_path)
+
+    assert failed
+    assert _event_rows(database) == ["before-backup", "keep-after-failure"]
+    safety_root = tmp_path / "backups" / "restore-safety"
+    assert len(list(safety_root.glob("pre-restore-*"))) == 1
