@@ -76,7 +76,7 @@ A fact about one world must not silently become a fact about every world. A reus
 - SQLite uses foreign keys, a busy timeout and WAL mode for local concurrency.
 - SQLite backups use the online backup API. Restore requires the caller to hold the runtime maintenance lock, validates integrity and exact schema compatibility, captures the previous database plus SQLite sidecars, stages the selected backup beside the target, and swaps it atomically. Failed post-install validation triggers rollback from the retained safety copy.
 - NIKA_DATA is outside the Git repository by default.
-- Runtime startup uses an OS-level file lock held until its authenticated control endpoint is ready. The operating system releases this lock automatically if the starter crashes. Stale status metadata is checked against both the authenticated endpoint and recorded PID; dead-process status is atomically replaced by the next runtime.
+- Runtime startup uses a Windows named mutex or a POSIX non-blocking file lock, held until its authenticated control endpoint is ready. The operating system releases the primitive automatically if the owning process exits. `start.lock` is only a diagnostic PID marker; it is not the lock authority. Stale status metadata is checked against both the authenticated endpoint and recorded PID; dead-process status is atomically replaced by the next runtime.
 
 ### Operational logs
 
