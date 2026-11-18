@@ -166,15 +166,20 @@ Schema v2 details:
 - ConversationStore persists messages, returns chronological recent history, caps user input at 4,000 chars and supports request-id idempotency.
 - ContextBuilder uses up to 12 recent messages and 6 relevant memories, drops oldest history/lowest-ranked memories first, and enforces a hard 12 KiB package budget. It explicitly returns `world_context: null` until a freshness/scope contract is implemented.
 
-Validation:
-- Earlier CI attempt failed only on test import sorting; fixed by sorting `ContextBuilder` before `ContextBuildError`.
-- Earlier intermediate run caught the legacy provenance expectation during the change from `user_taught` to `hypothesis`; test and docs were updated.
-- Latest runs for current branch head `1925276a1e6e1fa294d27f62faffe4a6b87ab3b6`:
-  - Python CI run 44407374264: in progress at context update.
-  - Fabric client mod build run 44407374206: in progress at context update.
-- Do not claim current commit is CI-verified until both latest runs complete successfully.
+### Backup compatibility
 
-After CI succeeds, next step is provider manager configuration and a tested local OpenAI-compatible endpoint. No endpoint/model name should be assumed until verified on the actual Nika machine. Chat endpoint and Fabric plain-text routing follow later.
+- `agent/src/nika/backup.py` now accepts supported legacy backup schema v1 and migrates only a staged temporary copy to the current schema before the atomic restore swap.
+- Schema v0 and unsupported future schemas are rejected.
+- The original selected backup remains unchanged.
+- Test `test_restore_migrates_v1_backup_without_modifying_source` creates a v1 SQLite backup with event and memory data, restores it into schema v2, verifies legacy memory provenance defaults to `hypothesis`, and confirms the original backup remains schema v1.
+
+### Validation
+- Current branch head before the final continuity refresh: `577d9450b7f1334959304f79fb2c78b57826fd09`.
+- Python CI run 44408464677: **success**. All six matrix combinations (Python 3.11, 3.12 and 3.13 on Ubuntu and Windows) passed compile, Ruff lint and tests. Source overlay archive job also succeeded.
+- Fabric build run 44408464712: **success**.
+- Source overlay artifact ID 14475307885. No new Minecraft JAR was required because this milestone changed Python and documentation, not Fabric mod code. Continue delivering a new JAR only when a new mod build artifact exists.
+
+Next implementation step: add a provider-independent OpenAI-compatible chat adapter with explicit environment configuration, bounded timeouts/responses and fake-server tests. Do not assume the actual LM Studio endpoint or model name until verified on the PC running the Nika Python runtime. After the provider adapter, add the authenticated chat endpoint, then implement the Fabric private plain-text chat routing.
 
 ## 7. Next development milestone: Nika Intelligence 0.5.x
 
