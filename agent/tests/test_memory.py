@@ -180,3 +180,17 @@ def test_recent_message_limit_is_validated(stores) -> None:
     conversation = conversations.create_conversation()
     with pytest.raises(MemoryValidationError, match="limit"):
         conversations.get_recent_messages(conversation.conversation_id, limit=0)
+
+def test_memory_search_matches_cyrillic_case_insensitively(stores) -> None:
+    memories, _ = stores
+    record = memories.add_memory(
+        MemoryInput(
+            category="preference",
+            content="Виталий любит понятные схемы.",
+            source="user",
+            confidence=1.0,
+        )
+    )
+
+    matches = memories.search_memories("ВИТАЛИЙ СХЕМЫ")
+    assert [item.memory_id for item in matches] == [record.memory_id]
