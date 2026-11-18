@@ -38,6 +38,8 @@ python -m nika.cli doctor
 
 The first doctor run creates the local data directory and initializes SQLite. By default, data is stored in ~/NIKA_DATA. Set NIKA_DATA to choose another location.
 
+Before initializing SQLite, `nika doctor` validates the configured paths and checks that the data, logs, backups, runtime and database locations are usable. Empty `NIKA_DATA` or `NIKA_DATABASE_PATH` variables are treated as configuration errors instead of silently falling back to defaults. A database deliberately stored outside `NIKA_DATA` is allowed, but doctor reports that logs, runtime state and backups remain under `NIKA_DATA`.
+
 Operational logs are written as structured JSON Lines under `NIKA_DATA/logs/`: the CLI uses `cli.jsonl`, and the background service uses `runtime.jsonl`. Each log is limited to 2 MiB plus five rotated files. Known credential fields and common token formats are redacted before writing.
 
 **Windows PowerShell**
