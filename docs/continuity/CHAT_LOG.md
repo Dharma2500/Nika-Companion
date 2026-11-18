@@ -81,3 +81,12 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Added a canonical handoff link to README.md.
 - Updated PR #1 description with the latest observed workflow run IDs 44416364837 and 44416364976. Latest inspected jobs have no steps/logs/artifacts; v0.5.1 is still not CI-verified.
 - Documentation commits: 02ea7b6cbd571a9249df3963f93351a1ac0e83f9 (handoff), 67df949de0d36539cd8587c32c8888fce39e2f27 (stale context pointer), 54f616a32685e6c090ef619d6f30a8fe1449afab (chat log), ceeaa7fcc66cc80a2d577fe7311527394dcd7ac9 (README link). No source code changed.
+
+## 2026-11-19: public repository decision and preflight
+
+- Vitaly chose to make `Dharma2500/Nika-Companion` public rather than wait for the private-repository Actions allowance. The visibility is still private at the time of this update; Vitaly will change it manually.
+- Targeted review of the current feature branch: `.gitignore` excludes local environment files, NIKA_DATA, databases, logs and key/certificate files; the checked provider config contains no credential values and reads configuration locally; security docs explicitly prohibit committing secrets.
+- The Python and Fabric workflows have `contents: read`, use standard hosted runners, and use `pull_request` rather than `pull_request_target`. No self-hosted runners were found in these two workflow files.
+- Important limitation: this is not a forensic scan of all 159 PR commits, all branches or historical Actions logs. These become visible when the repo is public. Any credential found in history must be revoked/rotated, not merely deleted.
+- GitHub UI path: Settings → General → Danger Zone → Change repository visibility → Make public. Verify the exact repository name before confirming.
+- Next: verify actual public visibility, review Actions history/logs, enable available secret-scanning/push-protection settings, then re-check Actions and continue development. PR #1 remains draft/open/unmerged.
