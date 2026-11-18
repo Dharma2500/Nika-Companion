@@ -25,7 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Protocol-v1 read-only handshake with the local Python runtime.
+ * Authenticated, loopback-only client for the local Python runtime.
  *
  * The bridge token is read from the runtime status file and is never logged,
  * displayed, or sent anywhere except the loopback HMAC calculation.
@@ -33,7 +33,9 @@ import java.util.concurrent.Executors;
 final class BridgeClient {
     private static final int PROTOCOL_VERSION = 1;
     private static final String HELLO_PATH = "/bridge/v1/hello";
+    private static final String OBSERVE_PATH = "/bridge/v1/observe";
     private static final long MAX_STATUS_FILE_BYTES = 16 * 1024;
+    private static final int MAX_OBSERVATION_BYTES = 8 * 1024;
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(2))
@@ -47,6 +49,7 @@ final class BridgeClient {
     });
 
     private static volatile String lastStatus = "not checked (run /nika connect)";
+    private static volatile String lastObservationStatus = "not sent";
 
     private BridgeClient() {
     }
@@ -55,8 +58,23 @@ final class BridgeClient {
         return lastStatus;
     }
 
+    static String getLastObservationStatus() {
+        return lastObservationStatus;
+    }
+
     static CompletableFuture<String> connect() {
         return CompletableFuture.supplyAsync(BridgeClient::performHandshake, IO);
+    }
+
+    static CompletableFuture<String> submitObservation(JsonObject observation) {
+        byte[] body = observation.toString().getBytes(StandardCharsets.UTF_8);
+        if (body.length == 0 || body.length > MAX_OBSERVATION_BYTES) {
+            lastObservationStatus = "rejected (payload size)";
+            return CompletableFuture.completedFuture(
+                "Nika observation: payload exceeds the 8 KiB limit."
+            );
+        }
+        return CompletableFuture.supplyAsync(() -> performObservation(body), IO);
     }
 
     private static String performHandshake() {
@@ -64,7 +82,9 @@ final class BridgeClient {
             BridgeConfig config = readConfig();
             String timestamp = Long.toString(Instant.now().getEpochSecond());
             String nonce = UUID.randomUUID().toString();
-            String signature = sign(config.bridgeToken(), "GET", HELLO_PATH, timestamp, nonce);
+            String signature = sign(
+                config.bridgeToken(), "GET", HELLO_PATH, timestamp, nonce, new byte[0]
+            );
 
             URI endpoint = URI.create("http://127.0.0.1:" + config.port() + HELLO_PATH);
             HttpRequest request = HttpRequest.newBuilder(endpoint)
@@ -121,6 +141,79 @@ final class BridgeClient {
         }
     }
 
+    private static String performObservation(byte[] body) {
+        try {
+            BridgeConfig config = readConfig();
+            String timestamp = Long.toString(Instant.now().getEpochSecond());
+            String nonce = UUID.randomUUID().toString();
+            String signature = sign(
+                config.bridgeToken(), "POST", OBSERVE_PATH, timestamp, nonce, body
+            );
+
+            URI endpoint = URI.create("http://127.0.0.1:" + config.port() + OBSERVE_PATH);
+            HttpRequest request = HttpRequest.newBuilder(endpoint)
+                .timeout(Duration.ofSeconds(3))
+                .header("Content-Type", "application/json")
+                .header("X-Nika-Bridge-Timestamp", timestamp)
+                .header("X-Nika-Bridge-Nonce", nonce)
+                .header("X-Nika-Bridge-Signature", signature)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                .build();
+
+            HttpResponse<byte[]> response = HTTP.send(
+                request, HttpResponse.BodyHandlers.ofByteArray()
+            );
+            if (response.body().length > MAX_STATUS_FILE_BYTES) {
+                return observationFail("Python bridge returned an oversized response.");
+            }
+            if (response.statusCode() == 403) {
+                lastStatus = "unavailable";
+                return observationFail("Bridge authentication failed. Restart Nika and retry.");
+            }
+            if (response.statusCode() == 400) {
+                return observationFail("Python rejected the observation payload (HTTP 400).");
+            }
+            if (response.statusCode() == 413) {
+                return observationFail("Python rejected the observation as too large.");
+            }
+            if (response.statusCode() != 202) {
+                return observationFail(
+                    "Python bridge returned HTTP " + response.statusCode() + "."
+                );
+            }
+
+            JsonObject acknowledgement = JsonParser.parseString(
+                new String(response.body(), StandardCharsets.UTF_8)
+            ).getAsJsonObject();
+            if (!"nika".equals(acknowledgement.get("service").getAsString())
+                || !acknowledgement.get("accepted").getAsBoolean()
+                || acknowledgement.get("schema_version").getAsInt() != 1) {
+                return observationFail("Unexpected observation acknowledgement.");
+            }
+
+            String eventId = acknowledgement.get("event_id").getAsString();
+            if (eventId.length() < 8) {
+                return observationFail("Python returned an invalid event identifier.");
+            }
+            lastStatus = "connected (protocol v1)";
+            lastObservationStatus = "accepted";
+            return "Nika observation: accepted and saved locally (event "
+                + eventId.substring(0, 8) + ").";
+        } catch (java.nio.file.NoSuchFileException error) {
+            lastObservationStatus = "unavailable";
+            return "Nika runtime status not found. Start the Python runtime first.";
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return observationFail("Observation submission was interrupted.");
+        } catch (GeneralSecurityException error) {
+            return observationFail("Could not create the secure observation signature.");
+        } catch (IOException error) {
+            return observationFail("Local bridge unavailable. Is the Nika runtime running?");
+        } catch (RuntimeException error) {
+            return observationFail("Invalid response from the local Python runtime.");
+        }
+    }
+
     private static BridgeConfig readConfig() throws IOException {
         String configuredDirectory = System.getenv("NIKA_DATA");
         Path dataDirectory;
@@ -166,10 +259,11 @@ final class BridgeClient {
         String method,
         String path,
         String timestamp,
-        String nonce
+        String nonce,
+        byte[] body
     ) throws GeneralSecurityException {
         String bodyHash = HexFormat.of().formatHex(
-            MessageDigest.getInstance("SHA-256").digest(new byte[0])
+            MessageDigest.getInstance("SHA-256").digest(body)
         );
         String canonical = String.join(
             "\n", method.toUpperCase(), path, timestamp, nonce, bodyHash
@@ -181,6 +275,11 @@ final class BridgeClient {
 
     private static String fail(String message) {
         lastStatus = "unavailable";
+        return message;
+    }
+
+    private static String observationFail(String message) {
+        lastObservationStatus = "failed";
         return message;
     }
 
