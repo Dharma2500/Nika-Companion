@@ -7,9 +7,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.CameraRenderState;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.allay.Allay;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Random;
 
 /**
  * Renders a private, client-only visual companion.
@@ -24,26 +27,55 @@ final class CompanionRenderer {
     private static final double HEIGHT_OFFSET = 0.95;
     private static final double INITIAL_FORWARD_OFFSET = 0.55;
 
-    // Ignore tiny position noise so turning the camera never moves the anchor.
     private static final double MOVEMENT_THRESHOLD_SQUARED = 0.0004;
-
-    // A damped spring gives the companion momentum instead of per-tick snapping.
-    private static final double FOLLOW_SPRING = 0.18;
-    private static final double FOLLOW_DAMPING = 0.62;
-    private static final double MAX_FOLLOW_SPEED = 0.42;
-    private static final double ARRIVAL_DISTANCE = 0.025;
     private static final double TELEPORT_DISTANCE = 12.0;
+
+    // Stable, damped follow motion. The coefficients avoid the oscillation
+    // caused by a spring that is too strong for a 20 TPS update loop.
+    private static final double FOLLOW_SPRING = 0.12;
+    private static final double FOLLOW_DAMPING = 0.58;
+    private static final double MAX_FOLLOW_SPEED = 0.24;
+    private static final double ARRIVAL_DISTANCE = 0.025;
+
+    private static final double IDLE_WANDER_MIN_RADIUS = 0.10;
+    private static final double IDLE_WANDER_MAX_RADIUS = 0.30;
+    private static final int IDLE_WANDER_MIN_DELAY = 90;
+    private static final int IDLE_WANDER_MAX_DELAY = 170;
+    private static final int IDLE_LOOK_MIN_DELAY = 55;
+    private static final int IDLE_LOOK_MAX_DELAY = 125;
+
+    // Rotation response is deliberately slower than position response.
+    private static final float BODY_TURN_WHILE_MOVING = 0.12F;
+    private static final float BODY_TURN_WHILE_IDLE = 0.045F;
+    private static final float HEAD_TURN_RESPONSE = 0.13F;
+    private static final float MAX_HEAD_RELATIVE_YAW = 78.0F;
 
     private static final double BOB_AMPLITUDE = 0.065;
     private static final double BOB_SPEED = 0.105;
 
+    private static final Random RANDOM = new Random();
+
     private static boolean enabled;
+    private static boolean wasMoving;
+
     private static Allay avatar;
     private static ClientLevel avatarLevel;
+
     private static Vec3 desiredPosition;
     private static Vec3 smoothedPosition;
     private static Vec3 followVelocity = Vec3.ZERO;
     private static Vec3 previousPlayerPosition;
+    private static Vec3 travelDirection = new Vec3(0.0, 0.0, 1.0);
+
+    private static Vec3 idleAnchor;
+    private static Vec3 idleWanderOffset = Vec3.ZERO;
+    private static Vec3 lookTarget;
+
+    private static long nextIdleWanderTick;
+    private static long nextIdleLookTick;
+
+    private static float bodyYaw;
+    private static float headYaw;
 
     private CompanionRenderer() {
     }
@@ -72,70 +104,139 @@ final class CompanionRenderer {
             return;
         }
 
-        if (avatar == null || avatarLevel != client.level) {
-            createAvatar(client.level, client.player.position(), client.player.getYRot());
+        var player = client.player;
+        ClientLevel level = client.level;
+        Vec3 playerPosition = player.position();
+        long gameTime = level.getGameTime();
+
+        if (avatar == null || avatarLevel != level) {
+            createAvatar(level, playerPosition, player.getYRot(), player.getEyePosition(), gameTime);
         }
 
-        var player = client.player;
-        Vec3 playerPosition = player.position();
+        Vec3 horizontalMovement = playerPosition.subtract(previousPlayerPosition);
+        horizontalMovement = new Vec3(horizontalMovement.x, 0.0, horizontalMovement.z);
+        boolean moving = horizontalMovement.lengthSqr() > MOVEMENT_THRESHOLD_SQUARED;
 
-        updateFollowTarget(playerPosition);
+        if (moving) {
+            updateTravelDirection(horizontalMovement);
+            updateMovingTarget(playerPosition);
+            lookTarget = player.getEyePosition();
+        } else {
+            if (wasMoving || idleAnchor == null) {
+                enterIdle(playerPosition, gameTime, player.getEyePosition());
+            }
+            updateIdleBehaviour(playerPosition, gameTime, player.getEyePosition());
+        }
+
+        previousPlayerPosition = playerPosition;
+        wasMoving = moving;
+
         updateFollowMotion();
 
-        // Preserve the previous transform so the vanilla renderer can interpolate.
+        // Keep previous body/head angles for vanilla render-state interpolation.
         avatar.setOldPosAndRot();
-        double bob = Math.sin(client.level.getGameTime() * BOB_SPEED) * BOB_AMPLITUDE;
+        avatar.yBodyRotO = avatar.yBodyRot;
+        avatar.yHeadRotO = avatar.yHeadRot;
+
+        updateOrientation(playerPosition, moving);
+
+        double bob = Math.sin(gameTime * BOB_SPEED) * BOB_AMPLITUDE;
         avatar.setPos(
             smoothedPosition.x,
             smoothedPosition.y + bob,
             smoothedPosition.z
         );
         avatar.tickCount++;
-
-        // Nika looks toward the player, not toward the camera direction.
-        double dx = player.getX() - smoothedPosition.x;
-        double dz = player.getZ() - smoothedPosition.z;
-        float facingYaw = (float) (Math.atan2(dz, dx) * (180.0 / Math.PI)) - 90.0F;
-        avatar.setYRot(facingYaw);
     }
 
     /**
-     * While the player is moving, place Nika to the right and behind the
-     * actual travel direction. When horizontal movement stops, keep the
-     * world-space anchor fixed so turning to look at her cannot move her away.
+     * Low-pass the actual travel direction. This prevents tiny changes in
+     * per-tick player movement from rotating Nika's target around the player.
      */
-    private static void updateFollowTarget(Vec3 playerPosition) {
-        if (previousPlayerPosition == null || desiredPosition == null) {
-            previousPlayerPosition = playerPosition;
-            return;
-        }
-
-        Vec3 movement = playerPosition.subtract(previousPlayerPosition);
-        Vec3 horizontalMovement = new Vec3(movement.x, 0.0, movement.z);
-        previousPlayerPosition = playerPosition;
-
-        if (horizontalMovement.lengthSqr() > MOVEMENT_THRESHOLD_SQUARED) {
-            Vec3 forward = horizontalMovement.normalize();
-            Vec3 right = new Vec3(forward.z, 0.0, -forward.x);
-
-            desiredPosition = playerPosition
-                .subtract(forward.scale(TRAIL_DISTANCE))
-                .add(right.scale(SIDE_OFFSET))
-                .add(0.0, HEIGHT_OFFSET, 0.0);
+    private static void updateTravelDirection(Vec3 horizontalMovement) {
+        Vec3 sampleDirection = horizontalMovement.normalize();
+        double blend = travelDirection.dot(sampleDirection) < -0.25 ? 0.28 : 0.14;
+        Vec3 blended = travelDirection.lerp(sampleDirection, blend);
+        if (blended.lengthSqr() > 1.0E-6) {
+            travelDirection = blended.normalize();
         } else {
-            // Keep X/Z fixed while idle, but follow vertical movement such as jumping.
-            desiredPosition = new Vec3(
-                desiredPosition.x,
-                playerPosition.y + HEIGHT_OFFSET,
-                desiredPosition.z
-            );
+            travelDirection = sampleDirection;
         }
     }
 
+    private static void updateMovingTarget(Vec3 playerPosition) {
+        Vec3 right = new Vec3(travelDirection.z, 0.0, -travelDirection.x);
+        desiredPosition = playerPosition
+            .subtract(travelDirection.scale(TRAIL_DISTANCE))
+            .add(right.scale(SIDE_OFFSET))
+            .add(0.0, HEIGHT_OFFSET, 0.0);
+        idleAnchor = null;
+        idleWanderOffset = Vec3.ZERO;
+    }
+
+    private static void enterIdle(Vec3 playerPosition, long gameTime, Vec3 playerEyePosition) {
+        // Freeze the current world-space spot. Camera turns do not affect it.
+        Vec3 anchorSource = smoothedPosition != null ? smoothedPosition : desiredPosition;
+        idleAnchor = new Vec3(
+            anchorSource.x,
+            playerPosition.y + HEIGHT_OFFSET,
+            anchorSource.z
+        );
+        idleWanderOffset = Vec3.ZERO;
+        desiredPosition = idleAnchor;
+        lookTarget = playerEyePosition;
+        nextIdleWanderTick = gameTime + randomDelay(IDLE_WANDER_MIN_DELAY, IDLE_WANDER_MAX_DELAY);
+        nextIdleLookTick = gameTime + randomDelay(IDLE_LOOK_MIN_DELAY, IDLE_LOOK_MAX_DELAY);
+    }
+
     /**
-     * Critically damped-style spring motion with a speed cap and a long-distance
-     * recovery threshold. This avoids the jitter produced by directly lerping
-     * the rendered entity toward a new target every tick.
+     * Small, infrequent movements around the idle anchor and deliberate gaze
+     * changes give Nika life without making her orbit or leave conversation range.
+     */
+    private static void updateIdleBehaviour(
+        Vec3 playerPosition,
+        long gameTime,
+        Vec3 playerEyePosition
+    ) {
+        if (gameTime >= nextIdleWanderTick) {
+            double angle = RANDOM.nextDouble() * Math.PI * 2.0;
+            double radius = IDLE_WANDER_MIN_RADIUS
+                + RANDOM.nextDouble() * (IDLE_WANDER_MAX_RADIUS - IDLE_WANDER_MIN_RADIUS);
+            idleWanderOffset = new Vec3(
+                Math.cos(angle) * radius,
+                0.0,
+                Math.sin(angle) * radius
+            );
+            nextIdleWanderTick = gameTime
+                + randomDelay(IDLE_WANDER_MIN_DELAY, IDLE_WANDER_MAX_DELAY);
+        }
+
+        if (gameTime >= nextIdleLookTick) {
+            if (RANDOM.nextFloat() < 0.72F) {
+                lookTarget = playerEyePosition;
+            } else {
+                double angle = RANDOM.nextDouble() * Math.PI * 2.0;
+                double distance = 1.2 + RANDOM.nextDouble() * 1.4;
+                lookTarget = new Vec3(
+                    smoothedPosition.x + Math.cos(angle) * distance,
+                    smoothedPosition.y + 0.15 + RANDOM.nextDouble() * 0.55,
+                    smoothedPosition.z + Math.sin(angle) * distance
+                );
+            }
+            nextIdleLookTick = gameTime
+                + randomDelay(IDLE_LOOK_MIN_DELAY, IDLE_LOOK_MAX_DELAY);
+        }
+
+        desiredPosition = new Vec3(
+            idleAnchor.x + idleWanderOffset.x,
+            playerPosition.y + HEIGHT_OFFSET + idleWanderOffset.y,
+            idleAnchor.z + idleWanderOffset.z
+        );
+    }
+
+    /**
+     * A stable damped spring: acceleration is proportional to position error,
+     * while velocity damping prevents overshoot and high-frequency jitter.
      */
     private static void updateFollowMotion() {
         if (smoothedPosition == null) {
@@ -145,9 +246,7 @@ final class CompanionRenderer {
         }
 
         Vec3 displacement = desiredPosition.subtract(smoothedPosition);
-        double distance = displacement.length();
-
-        if (distance > TELEPORT_DISTANCE) {
+        if (displacement.lengthSqr() > TELEPORT_DISTANCE * TELEPORT_DISTANCE) {
             smoothedPosition = desiredPosition;
             followVelocity = Vec3.ZERO;
             return;
@@ -171,15 +270,56 @@ final class CompanionRenderer {
         }
     }
 
-    private static void createAvatar(ClientLevel level, Vec3 playerPosition, float playerYaw) {
+    /**
+     * The Allay uses separate body and head yaw values. Keeping them separate
+     * is essential: the body turns slowly while the head can glance naturally.
+     */
+    private static void updateOrientation(Vec3 playerPosition, boolean moving) {
+        Vec3 bodyLookTarget = moving
+            ? smoothedPosition.add(travelDirection)
+            : playerPosition.add(0.0, HEIGHT_OFFSET + 0.45, 0.0);
+
+        float targetBodyYaw = yawTo(smoothedPosition, bodyLookTarget);
+        float bodyResponse = moving
+            ? BODY_TURN_WHILE_MOVING
+            : BODY_TURN_WHILE_IDLE;
+        bodyYaw = Mth.rotLerp(bodyResponse, bodyYaw, targetBodyYaw);
+
+        Vec3 currentLookTarget = lookTarget != null
+            ? lookTarget
+            : playerPosition.add(0.0, HEIGHT_OFFSET + 0.45, 0.0);
+        float targetHeadYaw = yawTo(smoothedPosition, currentLookTarget);
+
+        // Vanilla mobs limit how far the head can turn away from the body.
+        float relativeHeadYaw = Mth.wrapDegrees(targetHeadYaw - bodyYaw);
+        relativeHeadYaw = Mth.clamp(
+            relativeHeadYaw,
+            -MAX_HEAD_RELATIVE_YAW,
+            MAX_HEAD_RELATIVE_YAW
+        );
+        targetHeadYaw = bodyYaw + relativeHeadYaw;
+        headYaw = Mth.rotLerp(HEAD_TURN_RESPONSE, headYaw, targetHeadYaw);
+
+        avatar.setYRot(bodyYaw);
+        avatar.setYBodyRot(bodyYaw);
+        avatar.setYHeadRot(headYaw);
+    }
+
+    private static void createAvatar(
+        ClientLevel level,
+        Vec3 playerPosition,
+        float playerYaw,
+        Vec3 playerEyePosition,
+        long gameTime
+    ) {
         clearAvatar();
+
         avatar = new Allay(EntityType.ALLAY, level);
         avatar.setNoAi(true);
         avatar.setNoGravity(true);
         avatar.setSilent(true);
         avatarLevel = level;
 
-        // Spawn beside and slightly ahead of the player so the first summon is visible.
         double yawRadians = Math.toRadians(playerYaw);
         Vec3 forward = new Vec3(-Math.sin(yawRadians), 0.0, Math.cos(yawRadians));
         Vec3 right = new Vec3(Math.cos(yawRadians), 0.0, Math.sin(yawRadians));
@@ -191,8 +331,39 @@ final class CompanionRenderer {
         smoothedPosition = desiredPosition;
         followVelocity = Vec3.ZERO;
         previousPlayerPosition = playerPosition;
+        travelDirection = forward;
+        wasMoving = false;
 
+        idleAnchor = new Vec3(
+            desiredPosition.x,
+            playerPosition.y + HEIGHT_OFFSET,
+            desiredPosition.z
+        );
+        idleWanderOffset = Vec3.ZERO;
+        lookTarget = playerEyePosition;
+        nextIdleWanderTick = gameTime
+            + randomDelay(IDLE_WANDER_MIN_DELAY, IDLE_WANDER_MAX_DELAY);
+        nextIdleLookTick = gameTime
+            + randomDelay(IDLE_LOOK_MIN_DELAY, IDLE_LOOK_MAX_DELAY);
+
+        bodyYaw = yawTo(smoothedPosition, playerEyePosition);
+        headYaw = bodyYaw;
         avatar.setPos(smoothedPosition.x, smoothedPosition.y, smoothedPosition.z);
+        avatar.setYRot(bodyYaw);
+        avatar.setYBodyRot(bodyYaw);
+        avatar.setYHeadRot(headYaw);
+        avatar.yBodyRotO = bodyYaw;
+        avatar.yHeadRotO = headYaw;
+    }
+
+    private static int randomDelay(int minimum, int maximum) {
+        return minimum + RANDOM.nextInt(maximum - minimum + 1);
+    }
+
+    private static float yawTo(Vec3 from, Vec3 to) {
+        double dx = to.x - from.x;
+        double dz = to.z - from.z;
+        return (float) Math.toDegrees(Math.atan2(-dx, dz));
     }
 
     private static void clearAvatar() {
@@ -202,6 +373,15 @@ final class CompanionRenderer {
         smoothedPosition = null;
         followVelocity = Vec3.ZERO;
         previousPlayerPosition = null;
+        travelDirection = new Vec3(0.0, 0.0, 1.0);
+        idleAnchor = null;
+        idleWanderOffset = Vec3.ZERO;
+        lookTarget = null;
+        nextIdleWanderTick = 0L;
+        nextIdleLookTick = 0L;
+        wasMoving = false;
+        bodyYaw = 0.0F;
+        headYaw = 0.0F;
     }
 
     private static void render(WorldRenderContext context) {
