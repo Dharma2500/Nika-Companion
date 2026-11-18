@@ -21,9 +21,8 @@ The project is built in small, testable layers. The local agent and persistent m
 | Persistent SQLite memory | Initial schema and event journal |
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
-| Fabric 1.21.11 client mod | Client-only mod; `/nika status`, `/nika connect` and manual `/nika observe` with bounded block-state sampling; Fabric build CI verified, v1 local persistence verified, v2 local test pending |
-| Python ↔ Minecraft protocol | Authenticated handshake and one-shot `/nika observe` implemented; strict v1/v2 validation and versioned SQLite event persistence; Python CI verified, v1 local persistence verified, v2 local test pending |
-| Dashboard, voice, external AI | Planned, not required for local core |
+| Fabric 1.21.11 client mod | Client-only mod; `/nika status`, `/nika connect` and manual `/nika observe` with bounded block-state sampling; Fabric build CI verified, v1/v2 local persistence verified |
+| Python ↔ Minecraft protocol | Authenticated handshake and one-shot `/nika observe` implemented; strict v1/v2 validation and versioned SQLite event persistence; Python CI and v1/v2 local persistence verified |
 
 ## Quick start
 
@@ -42,7 +41,7 @@ Before initializing SQLite, `nika doctor` validates the configured paths and che
 
 Learning assets use `NIKA_DATA/learning` by default. This is where future datasets, base models, adapters, checkpoints, experiments and model exports belong. Set `NIKA_LEARNING_DIR` only when you deliberately want those files on a different volume.
 
-Operational logs are written as structured JSON Lines under `NIKA_DATA/logs/`: the CLI uses `cli.jsonl`, and the background service uses `runtime.jsonl`. Each log is limited to 2 MiB plus five rotated files. Known credential fields and common token formats are redacted before writing.
+Operational logs are written as structured JSON Lines under `NIKA_DATA/logs/`: the CLI uses `cli.jsonl`, and the background service uses `runtime.jsonl`. Each file is limited to 2 MiB plus five rotated files. Known credential fields and common token formats are redacted before writing.
 
 **Windows PowerShell**
 ~~~powershell
