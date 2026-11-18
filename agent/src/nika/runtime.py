@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import json
 import os
 import secrets
@@ -94,24 +95,52 @@ def get_runtime_status(settings: Settings | None = None) -> dict[str, Any] | Non
 
 
 def _acquire_start_lock(settings: Settings) -> int:
-    """Acquire an OS-level startup lock that is released automatically on process exit."""
+    """Acquire an OS-level lock that the operating system releases on process exit."""
     lock_path = _lock_path(settings)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if os.name == "nt":
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create_mutex = kernel32.CreateMutexW
+        create_mutex.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        create_mutex.restype = wintypes.HANDLE
+        wait_for_single_object = kernel32.WaitForSingleObject
+        wait_for_single_object.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        wait_for_single_object.restype = wintypes.DWORD
+
+        lock_identity = str(lock_path.resolve()).casefold().encode("utf-8")
+        mutex_name = (
+            "Local\\NikaStartup-" + hashlib.sha256(lock_identity).hexdigest()
+        )
+        handle = create_mutex(None, False, mutex_name)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+
+        wait_result = wait_for_single_object(handle, 0)
+        if wait_result not in (0x00000000, 0x00000080):  # OBJECT_0 or ABANDONED
+            kernel32.CloseHandle(handle)
+            if wait_result == 0x00000102:  # WAIT_TIMEOUT
+                raise RuntimeError("Nika is already starting.")
+            raise ctypes.WinError(ctypes.get_last_error())
+
+        try:
+            lock_path.write_text(str(os.getpid()), encoding="ascii")
+        except Exception:
+            kernel32.ReleaseMutex(handle)
+            kernel32.CloseHandle(handle)
+            raise
+        return int(handle)
+
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         if os.fstat(descriptor).st_size == 0:
             os.write(descriptor, b"0")
         os.lseek(descriptor, 0, os.SEEK_SET)
 
+        import fcntl
+
         try:
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as error:
             raise RuntimeError("Nika is already starting.") from error
 
@@ -125,17 +154,30 @@ def _acquire_start_lock(settings: Settings) -> int:
 
 
 def _release_start_lock(descriptor: int) -> None:
-    """Release the OS-level startup lock and close its file descriptor."""
+    """Release the OS-level startup lock."""
+    if os.name == "nt":
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        release_mutex = kernel32.ReleaseMutex
+        release_mutex.argtypes = [wintypes.HANDLE]
+        release_mutex.restype = wintypes.BOOL
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+        close_handle.restype = wintypes.BOOL
+        try:
+            if not release_mutex(wintypes.HANDLE(descriptor)):
+                raise ctypes.WinError(ctypes.get_last_error())
+        finally:
+            if not close_handle(wintypes.HANDLE(descriptor)):
+                LOGGER.error(
+                    "runtime.start_mutex_close_failed",
+                    extra={"winerror": ctypes.get_last_error()},
+                )
+        return
+
     try:
-        if os.name == "nt":
-            import msvcrt
+        import fcntl
 
-            os.lseek(descriptor, 0, os.SEEK_SET)
-            msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
     except OSError:
         LOGGER.exception("runtime.start_lock_release_failed")
     finally:
