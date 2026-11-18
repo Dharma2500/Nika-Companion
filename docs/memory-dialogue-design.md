@@ -1,6 +1,6 @@
 # Nika Intelligence: memory and plain-chat dialogue design
 
-Status: design baseline for the next implementation milestone. No chat endpoint or model provider is implemented yet.
+Status: text-first intelligence foundation is being implemented. Memory, conversation storage, bounded context assembly and a provider adapter exist; the authenticated chat endpoint and Minecraft chat routing do not exist yet.
 
 ## Product goal
 
@@ -134,9 +134,15 @@ Implemented in the current feature branch:
 - Deterministic `ContextBuilder`: stable personality instructions, recent history, relevant memories with provenance labels and a hard UTF-8 byte budget.
 - Initial keyword retrieval uses bounded candidate reads and Python Unicode casefolding, so Russian text is searched case-insensitively. Embeddings/semantic retrieval are not implemented.
 - Current ContextBuilder intentionally returns `world_context: null`. It does not pretend to know the current world. Fresh observation attachment will be added only after a scoped/freshness contract is implemented.
+- Provider adapter in `agent/src/nika/provider.py`: explicit `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL` and optional `NIKA_LLM_API_KEY`; no hard-coded model or host.
+- OpenAI-compatible `/chat/completions` request via Python standard library, without third-party HTTP dependencies.
+- Bounded provider timeout (1–120 seconds), request payload (32 KiB), response body (64 KiB), reply text (12,000 characters), model name, token limit and temperature.
+- Sanitized provider errors; request/response body and API key are not written to diagnostics logs.
+- Fake local HTTP-server tests cover config validation, response parsing, payload shape, HTTP errors and oversized output.
 
 Not implemented yet:
-- LLM provider manager or a verified LM Studio connection.
+- Verification/configuration of the real LM Studio endpoint and model ID on the PC running Nika.
+- Full provider budgets, failover/rotation and automatic mode selection.
 - Authenticated chat endpoint.
 - Fabric chat input interception, key binding and local response rendering.
 - Automatic memory extraction or voice.
@@ -146,7 +152,7 @@ Not implemented yet:
 1. Database schema migration 2 and tests.
 2. Typed ConversationStore and MemoryStore APIs.
 3. Deterministic ContextBuilder and tests for provenance, scope, freshness and budgets.
-4. Provider interface plus configuration/diagnostics, initially LM Studio-compatible.
+4. [x] Provider interface plus explicit environment configuration and bounded OpenAI-compatible adapter with fake-server tests. Verify the real LM Studio endpoint/model before enabling it.
 5. Strict chat request/response schema and authenticated `/bridge/v1/chat` endpoint.
 6. Fabric chat routing and local reply rendering.
 7. Manual Minecraft 1.21.11 tests: private routing, server-chat toggle, slash-command passthrough, offline fallback, long messages, repeated submissions, world changes and no chat leakage to the server.
