@@ -10,7 +10,13 @@ from nika.backup import BackupManager
 from nika.config import Settings
 from nika.database import Database
 from nika.logging_setup import get_logger, setup_logging
-from nika.runtime import get_runtime_status, serve, start_runtime, stop_runtime
+from nika.runtime import (
+    get_runtime_status,
+    runtime_maintenance_lock,
+    serve,
+    start_runtime,
+    stop_runtime,
+)
 
 LOGGER = get_logger(__name__)
 
@@ -70,6 +76,57 @@ def run_backup_verify(path: str) -> int:
 
     print(f"Backup verification: {'OK' if valid else 'FAILED'}")
     return 0 if valid else 1
+
+
+def run_restore(path: str, confirmed: bool = False) -> int:
+    settings, database = _storage()
+    manager = BackupManager(database, settings.data_dir / "backups")
+    try:
+        source = manager.validate_restore_source(Path(path))
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        LOGGER.exception("backup.restore_preflight_failed", extra={"backup_path": path})
+        print(f"Restore preflight: ERROR ({error})")
+        return 1
+
+    if not confirmed:
+        print("The selected backup passed SQLite integrity and schema checks.")
+        print(f"Database to replace: {settings.database_path}")
+        print("Nika will be stopped before replacement.")
+        print("The current database and SQLite sidecar files will be preserved locally.")
+        try:
+            answer = input("Continue with restore? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("Restore: cancelled")
+            return 1
+        if answer not in {"y", "yes"}:
+            print("Restore: cancelled")
+            return 0
+
+    try:
+        with runtime_maintenance_lock(settings):
+            safety_path = manager.restore_backup(source)
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        LOGGER.exception(
+            "backup.restore_failed",
+            extra={"backup_path": str(source)},
+        )
+        print(f"Restore: ERROR ({error})")
+        return 1
+
+    LOGGER.info(
+        "backup.restored",
+        extra={
+            "backup_path": str(source),
+            "safety_copy": str(safety_path) if safety_path else None,
+        },
+    )
+    print("Restore: OK")
+    print(f"Restored from: {source}")
+    if safety_path is not None:
+        print(f"Pre-restore safety copy: {safety_path}")
+    else:
+        print("Pre-restore safety copy: not needed (no previous database existed)")
+    return 0
 
 
 def run_start() -> int:
@@ -135,6 +192,16 @@ def main() -> None:
         help="verify a backup file",
     )
     verify_parser.add_argument("path", help="path to the SQLite backup")
+    restore_parser = subparsers.add_parser(
+        "restore",
+        help="restore the database from a verified backup",
+    )
+    restore_parser.add_argument("path", help="path to the SQLite backup")
+    restore_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="skip the interactive confirmation prompt",
+    )
     subparsers.add_parser("start", help="start the local Nika runtime in the background")
     subparsers.add_parser("foreground", help="run Nika in this console; closing it stops Nika")
     subparsers.add_parser("status", help="show local runtime status")
@@ -153,6 +220,8 @@ def main() -> None:
     }
     if args.command == "backup-verify":
         raise SystemExit(run_backup_verify(args.path))
+    if args.command == "restore":
+        raise SystemExit(run_restore(args.path, confirmed=args.yes))
     if args.command in commands:
         raise SystemExit(commands[args.command]())
 
