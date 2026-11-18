@@ -57,7 +57,6 @@ def test_restore_command_stops_runtime_and_restores_database(
     assert _event_ids(safety_database) == ["later-event", "saved-event"]
 
 
-
 def test_doctor_reports_invalid_configuration_before_database_creation(
     monkeypatch,
     tmp_path: Path,
