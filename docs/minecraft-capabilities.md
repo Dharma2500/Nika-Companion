@@ -13,7 +13,7 @@ This inventory separates data that the current mod already sends, data that is t
 5. Keep payloads bounded and versioned. Persist observations locally before any optional model analysis.
 6. Treat player-owned data as private. A field can be technically available and still remain excluded until separately approved.
 
-## Implemented and locally verified
+## Implemented in v0.3.0 (CI verification pending)
 
 | Area | Data | Source / limits |
 |---|---|---|
@@ -53,11 +53,11 @@ The project build uses Mojang's official mappings. The methods above were checke
 
 The currently included selected_item value is only the registry identifier of the item in the selected hotbar slot. It does not authorize reading the rest of the inventory.
 
-## Recommended next increment
+## Implemented in observation v3
 
-Observation v3 should add only the P1 fields: biome, time of day, rain/thunder, local light level, game mode and one-shot movement-state booleans. Keep /nika observe manual, preserve the 8 KiB payload ceiling, and continue to reject unknown fields server-side. The targeted block is deferred to a later, separately tested increment.
+The v0.3.0 client payload adds the P1 fields listed above while preserving the v2 bounded block sample. Collection remains manual through `/nika observe`, uses the player's already-loaded chunk, and has no polling or world-scanning loop. Python validates strict v3 fields, preserves v1/v2 compatibility, and stores versioned events as `minecraft.observation.v3`.
 
-Before implementation, update the Python validator, JSON Schema and tests together with the Fabric payload. Preserve v1/v2 compatibility and persist v3 as minecraft.observation.v3.
+The targeted-block candidate remains deferred. V3 must pass the Fabric build, Python CI and a live Windows Minecraft-to-SQLite test before this milestone is marked complete.
 
 ## References
 
