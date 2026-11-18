@@ -29,6 +29,12 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Verify CLI and runtime logs use separate process-owned files
 - [x] Crash/restart tests and stale runtime recovery (CI: Python 3.11–3.13; verified locally on Windows with Python 3.15.1)
 - [x] Configuration validation and diagnostics
+- [ ] Safe data-directory migration to another disk
+  - [x] Separate configurable learning/model storage path
+  - [x] Runtime maintenance lock and fresh pre-migration database backup
+  - [x] Copy-first migration that preserves source and skips volatile runtime state
+  - [x] SQLite online backup, integrity/schema verification and destination staging
+  - [ ] Verify migration on Vitaly's Windows machine and switch NIKA_DATA to D:\\NIKA_DATA
   - [x] Reject explicitly empty or invalid path environment variables
   - [x] Validate data, logs, backups, runtime and database locations before startup
   - [x] Check existing database file access and warn when it is outside NIKA_DATA
