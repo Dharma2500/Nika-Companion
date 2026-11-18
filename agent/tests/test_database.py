@@ -127,5 +127,5 @@ def test_migration_v2_preserves_existing_memories(tmp_path: Path) -> None:
     ).fetchone()
     assert record is not None
     assert record["content"] == "Vitaly likes clear answers"
-    assert record["provenance_type"] == "user_taught"
+    assert record["provenance_type"] == "hypothesis"
     assert record["scope"] == "global"
