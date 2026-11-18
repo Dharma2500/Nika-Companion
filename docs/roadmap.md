@@ -28,7 +28,12 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Verify secret redaction in messages, structured fields and tracebacks
 - [x] Verify CLI and runtime logs use separate process-owned files
 - [x] Crash/restart tests and stale runtime recovery (CI: Python 3.11–3.13; verified locally on Windows with Python 3.15.1)
-- [ ] Configuration validation and diagnostics
+- [x] Configuration validation and diagnostics
+  - [x] Reject explicitly empty or invalid path environment variables
+  - [x] Validate data, logs, backups, runtime and database locations before startup
+  - [x] Check existing database file access and warn when it is outside NIKA_DATA
+  - [x] Fail before logging or SQLite initialization when configuration is invalid
+  - [x] Cover invalid paths and CLI fail-fast behavior with automated tests
 
 ## Phase 2: Minecraft client integration
 
