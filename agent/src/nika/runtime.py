@@ -10,11 +10,13 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from ctypes import wintypes
 from http.client import HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from collections.abc import Iterator
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -270,6 +272,53 @@ def stop_runtime(settings: Settings | None = None) -> bool:
             return True
         time.sleep(0.2)
     return False
+
+
+@contextmanager
+def runtime_maintenance_lock(settings: Settings | None = None) -> Iterator[None]:
+    """Reserve startup and stop any known runtime before database maintenance."""
+    settings = settings or Settings.from_env()
+    descriptor = _acquire_start_lock(settings)
+    try:
+        status_path = _status_path(settings)
+        if status_path.exists():
+            status = _read_status(settings)
+            if status is None:
+                raise RuntimeError(
+                    f"Nika runtime status file is invalid: {status_path}. "
+                    "Refusing database maintenance until it is inspected."
+                )
+
+            response = _request(status, "GET", "/status")
+            runtime_responds = (
+                response is not None
+                and response.get("state") == "running"
+                and response.get("pid") == status["pid"]
+            )
+            if runtime_responds:
+                if not stop_runtime(settings):
+                    raise RuntimeError(
+                        "Nika runtime did not stop cleanly; database was not changed."
+                    )
+            elif _pid_is_running(status["pid"]):
+                raise RuntimeError(
+                    f"Nika runtime process {status['pid']} is still alive but "
+                    "unresponsive; database was not changed."
+                )
+            else:
+                LOGGER.warning(
+                    "runtime.stale_status_removed_for_maintenance",
+                    extra={"pid": status["pid"]},
+                )
+                status_path.unlink(missing_ok=True)
+
+        if status_path.exists():
+            raise RuntimeError(
+                "Nika runtime status remains after shutdown; database was not changed."
+            )
+        yield
+    finally:
+        _release_start_lock(descriptor)
 
 
 def _pid_is_running(pid: int) -> bool:
