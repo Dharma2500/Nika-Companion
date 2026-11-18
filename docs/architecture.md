@@ -131,8 +131,20 @@ and confidence labels. It enforces a hard UTF-8 byte budget. Until a freshness
 and world-scope contract is implemented, its `world_context` field is null.
 It must never present stale observations as current world state.
 
-There is not yet an LLM provider integration or authenticated chat route. The
-next work is provider configuration and a strict local bridge dialogue endpoint.
+The provider adapter in `nika.provider` speaks OpenAI-compatible
+`/chat/completions` using only the Python standard library. It reads
+`NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL` and optional `NIKA_LLM_API_KEY`; no
+host or model is hard-coded. Requests and responses have strict size limits,
+timeouts and sanitized error handling. Fake local-server tests verify the
+protocol shape. This does not mean a real model is configured: the actual
+LM Studio endpoint and model ID must be checked on the PC running the Nika
+runtime before use.
+
+The authenticated chat route and Fabric chat interception are not implemented
+yet. Plain Minecraft text chat routing is designed in
+`docs/memory-dialogue-design.md`: ordinary text is privately routed to Nika
+without a per-message slash command, while a configurable key binding switches
+back to public server chat. Slash commands remain on their separate event path.
 Plain Minecraft text chat routing is designed in
 `docs/memory-dialogue-design.md`: ordinary text is privately routed to Nika
 without a per-message slash command, while a configurable key binding switches
