@@ -63,11 +63,14 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [ ] Client-only companion renderer
   - [x] Add a render-only vanilla Allay instance that is never inserted into ClientLevel
   - [x] Add fixed idle anchor so looking at Nika does not move her around the player
-  - [x] Follow to the right/rear using actual horizontal movement direction
-  - [x] Add damped-spring follow motion and long-distance recovery
+  - [x] Follow to the right/rear using a filtered horizontal travel direction
+  - [x] Use a stable damped-spring follow integrator
+  - [x] Rotate body and head independently with smooth angular interpolation
+  - [x] Add timed idle glances and small-radius idle wandering
+  - [x] Keep the local avatar client-only and disable Allay AI/world interaction
   - [x] Add automatic authenticated bridge connection and retry
-  - [x] Add `/nika` and `/ника` summon commands plus dismiss aliases
-  - [ ] Verify rendering, idle visibility, follow smoothness and world-transition cleanup in Minecraft 1.21.11
+  - [x] Keep one summon command: `/nika`; hide with `/nika dismiss`
+  - [ ] Verify head/body animation, idle gestures, follow smoothness and world-transition cleanup in Minecraft 1.21.11
 - [ ] Action-request authentication, capability validation and approval gates
 
 ## Phase 3: memory, skills and dialogue
