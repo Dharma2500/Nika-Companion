@@ -147,7 +147,7 @@ Implemented in the current feature branch and released as Fabric v0.5.0:
 - When no provider is configured, the route returns HTTP 503 before persisting the user message. Chat bodies are never written to runtime logs.
 - The bridge advertises `dialogue.chat` only when a provider was explicitly configured at runtime startup.
 - Fabric v0.5.0 intercepts ordinary outgoing chat only in private Nika mode and only when `dialogue.chat` is available. Messages are canceled before server send and replies are displayed locally; slash commands remain on their separate path.
-- Summoning Nika enables private chat. A configurable key binding (default N, visible in Controls) switches to public server chat. If the provider/bridge is unavailable before send, the client blocks the message locally with a warning; it does not send it to the server. Vitaly must explicitly press N to switch to public chat. If a request fails after interception, a local error says the text was not sent to the server.
+- Summoning Nika enables private chat. A configurable key binding (default N, visible in Controls) switches to public server chat. If the provider/bridge is unavailable before send, ordinary text falls back to public server chat with a local warning. Do not type private content until the bridge advertises dialogue.chat. If a request fails after interception, a local error says the text was not sent to the server.
 - The conversation UUID is local to the current client-world session and resets when the client level changes.
 
 Not implemented or not yet verified:
