@@ -16,6 +16,8 @@ The default data directory is ~/NIKA_DATA. Set NIKA_DATA to a dedicated path on 
 
 The CLI rejects empty path variables and checks the data, logs, backups, runtime and database locations before opening SQLite or creating logs. Existing database files must be readable and writable. A database outside NIKA_DATA is supported, but the CLI warns that its logs, runtime state and backups remain in NIKA_DATA.
 
+Learning assets default to `NIKA_DATA/learning`, with `NIKA_LEARNING_DIR` available for a deliberate separate-volume location. Data migration is copy-first: it holds the runtime maintenance lock, takes a fresh database backup, uses SQLite's online backup API, verifies the staged database, omits volatile runtime status and lock files, and never deletes the source directory. The source should remain untouched until the destination has been verified.
+
 ## Local logs
 
 Structured application logs are stored as JSON Lines in `NIKA_DATA/logs/`.
