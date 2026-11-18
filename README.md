@@ -21,7 +21,7 @@ The project is built in small, testable layers. The local agent and persistent m
 | Persistent SQLite memory | Initial schema and event journal |
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
-| Fabric 1.21.11 client mod | Not started |
+| Fabric 1.21.11 client mod | Client-only skeleton; `/nika status` and CI JAR build verified |
 | Python ↔ Minecraft protocol | To be designed and versioned |
 | Dashboard, voice, external AI | Planned, not required for local core |
 
