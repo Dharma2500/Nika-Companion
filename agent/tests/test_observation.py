@@ -161,7 +161,7 @@ def test_validate_observation_rejects_invalid_v1_payloads(mutation, message: str
         ),
         (
             lambda value: value["world"]["block_sample"]["range"].update(x=8),
-            "supported 5x3x5",
+            "integer from 0 to 4",
         ),
         (
             lambda value: value["world"]["block_sample"].update(scanned_positions=76),
