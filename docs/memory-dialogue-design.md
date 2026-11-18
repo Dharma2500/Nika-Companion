@@ -1,6 +1,6 @@
 # Nika Intelligence: memory and plain-chat dialogue design
 
-Status: text-first intelligence foundation is being implemented. Memory, conversation storage, bounded context assembly and a provider adapter exist; the authenticated chat endpoint and Minecraft chat routing do not exist yet.
+Status: text-first foundation, authenticated private chat endpoint and Fabric plain-text routing are implemented in v0.5.0. Real LM Studio configuration and in-game acceptance tests remain open.
 
 ## Product goal
 
@@ -35,9 +35,9 @@ Implementation hook: Fabric API 1.21.11 `ClientSendMessageEvents.ALLOW_CHAT` can
 
 ## Python data model
 
-The current database schema is version 1. It already creates `event_log`, `memories`, `skills` and `world_facts`, but there is no full Memory API or conversation history API.
+The current SQLite database schema is version 2. It retains the original `event_log`, `memories`, `skills` and `world_facts` tables and adds conversation history plus memory provenance/scope. Typed MemoryStore and ConversationStore APIs are implemented.
 
-The planned schema migration 2 adds:
+Schema migration 2 adds:
 
 ### Conversation tables
 
@@ -65,17 +65,18 @@ Extend the existing `memories` table without deleting or rewriting current recor
 - optional `world_id`
 - bounded `tags_json`
 
-Keep the existing `source` and `confidence` fields. Existing rows migrate to `user_taught` / `global` defaults only as a the cautious `hypothesis` default; they must not be presented as user-taught or verified facts.
+Keep the existing `source` and `confidence` fields. Existing rows migrate with the cautious `hypothesis` provenance and `global` scope defaults; they must not be presented as user-taught or verified facts.
 
 ## Memory API
 
-A dedicated Python module owns structured memory access. It will expose typed methods rather than allowing dialogue code to issue arbitrary SQL:
+A dedicated Python module (agent/src/nika/memory.py) owns structured memory access. It exposes typed methods rather than allowing dialogue code to issue arbitrary SQL:
 
 - `add_memory`: validate content, category, provenance, scope, tags and confidence; persist a stable memory ID.
 - `get_memory`: fetch one record by ID.
 - `search_memories`: retrieve a bounded list of candidate memories using query terms, scope and provenance.
 - `list_recent_memories`: support review and correction tools.
 - `append_message`: persist one conversation message with role and request-id validation.
+- `get_message_by_request_id`: retrieve a previously persisted request for retry/idempotency checks.
 - `get_recent_messages`: return recent conversation turns in chronological order.
 - `create_conversation` / `get_conversation`: manage conversation identity.
 
@@ -152,7 +153,7 @@ Implemented in the current feature branch and released as Fabric v0.5.0:
 Not implemented or not yet verified:
 - The actual LM Studio endpoint and exact model ID on the PC running the Nika Python runtime have not been checked or configured.
 - Full provider budgets, failover/rotation and automatic mode selection.
-- Manual in-game acceptance of private routing, no server leakage, key binding, slash passthrough, fail-closed offline behavior and world transitions.
+- Manual in-game acceptance of private routing, no server leakage when dialogue.chat is available, key binding, slash passthrough, explicit public fallback when unavailable and world transitions.
 - Automatic memory extraction, voice and autonomous Minecraft actions.
 
 ## Implementation order
