@@ -23,7 +23,15 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from nika.config import Settings
+from nika.database import Database
+from nika.event_store import EventStore, NewEvent
 from nika.logging_setup import get_logger, setup_logging
+from nika.observation import (
+    MAX_OBSERVATION_BYTES,
+    OBSERVATION_SCHEMA_VERSION,
+    ObservationValidationError,
+    decode_observation,
+)
 
 LOGGER = get_logger(__name__)
 
@@ -36,6 +44,7 @@ STOP_TIMEOUT = 10.0
 
 BRIDGE_PROTOCOL_VERSION = 1
 BRIDGE_HELLO_PATH = "/bridge/v1/hello"
+BRIDGE_OBSERVE_PATH = "/bridge/v1/observe"
 BRIDGE_MAX_REQUEST_BYTES = 64 * 1024
 BRIDGE_MAX_CLOCK_SKEW_SECONDS = 60
 BRIDGE_NONCE_TTL_SECONDS = 120
@@ -75,7 +84,14 @@ class BridgeAuthenticator:
         signature: str,
         body: bytes = b"",
     ) -> bool:
-        if method.upper() != "GET" or path != BRIDGE_HELLO_PATH or body:
+        method = method.upper()
+        is_handshake = method == "GET" and path == BRIDGE_HELLO_PATH and not body
+        is_observation = (
+            method == "POST"
+            and path == BRIDGE_OBSERVE_PATH
+            and 0 < len(body) <= MAX_OBSERVATION_BYTES
+        )
+        if not (is_handshake or is_observation):
             return False
         if len(body) > BRIDGE_MAX_REQUEST_BYTES:
             return False
@@ -575,6 +591,9 @@ def serve(foreground: bool = False) -> None:
     token = secrets.token_urlsafe(32)
     bridge_token = secrets.token_urlsafe(32)
     bridge_authenticator = BridgeAuthenticator(bridge_token)
+    database = Database(settings.database_path)
+    database.initialize()
+    event_store = EventStore(database)
     stop_event = threading.Event()
     shutdown_complete = threading.Event()
     _console_handler: tuple[Any, Any] | None = None
@@ -652,6 +671,77 @@ def serve(foreground: bool = False) -> None:
             )
 
         def do_POST(self) -> None:
+            if self.path == BRIDGE_OBSERVE_PATH:
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 10:
+                    self._send(413, {"error": "request_too_large"})
+                    return
+                content_length = int(raw_length)
+                if content_length > MAX_OBSERVATION_BYTES:
+                    self._send(413, {"error": "observation_too_large"})
+                    return
+                if (
+                    content_length == 0
+                    or self.headers.get("Transfer-Encoding") is not None
+                ):
+                    self._send(400, {"error": "invalid_observation_body"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+
+                body = self.rfile.read(content_length)
+                if len(body) != content_length:
+                    self._send(400, {"error": "incomplete_request_body"})
+                    return
+                if not bridge_authenticator.verify(
+                    method=self.command,
+                    path=self.path,
+                    timestamp=self.headers.get("X-Nika-Bridge-Timestamp", ""),
+                    nonce=self.headers.get("X-Nika-Bridge-Nonce", ""),
+                    signature=self.headers.get("X-Nika-Bridge-Signature", ""),
+                    body=body,
+                ):
+                    self._send(403, {"error": "unauthorized"})
+                    return
+
+                try:
+                    observation = decode_observation(body)
+                except ObservationValidationError as error:
+                    self._send(
+                        400,
+                        {"error": "invalid_observation", "message": str(error)},
+                    )
+                    return
+
+                try:
+                    event_id = event_store.append(
+                        NewEvent(
+                            event_type="minecraft.observation.v1",
+                            source="minecraft-client",
+                            payload=observation,
+                        )
+                    )
+                except Exception:
+                    LOGGER.exception("runtime.observation_persist_failed")
+                    self._send(503, {"error": "observation_persistence_failed"})
+                    return
+
+                self._send(
+                    202,
+                    {
+                        "service": "nika",
+                        "accepted": True,
+                        "schema_version": OBSERVATION_SCHEMA_VERSION,
+                        "event_id": event_id,
+                    },
+                )
+                return
+
             if self.path != "/stop":
                 self._send(404, {"error": "not_found"})
             elif not self._authorized():
