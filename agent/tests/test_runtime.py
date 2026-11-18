@@ -77,6 +77,21 @@ def test_runtime_recovers_after_ungraceful_process_exit(tmp_path: Path) -> None:
     assert stop_runtime(settings)
 
 
+def test_stale_startup_marker_does_not_block_when_os_lock_is_free(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    runtime_dir = settings.data_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "start.lock").write_text("999999999", encoding="ascii")
+
+    descriptor = runtime._acquire_start_lock(settings)
+    runtime._release_start_lock(descriptor)
+
+
 def test_startup_lock_is_exclusive_and_released_after_process_exit(
     tmp_path: Path,
 ) -> None:
