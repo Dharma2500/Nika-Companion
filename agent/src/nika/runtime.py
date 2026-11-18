@@ -15,9 +15,9 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from http.cookies import SimpleCookie
 from ctypes import wintypes
 from http.client import HTTPException
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -226,8 +226,6 @@ def get_runtime_status(settings: Settings | None = None) -> dict[str, Any] | Non
     ):
         return None
     return response
-
-
 
 
 def create_dashboard_ticket(settings: Settings | None = None) -> tuple[str, str]:
