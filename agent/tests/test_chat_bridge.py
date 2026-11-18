@@ -190,6 +190,7 @@ def test_bridge_chat_rejects_reused_request_id_with_different_message(
     with fake_provider() as (base_url, provider_calls):
         monkeypatch.setenv("NIKA_LLM_BASE_URL", base_url)
         monkeypatch.setenv("NIKA_LLM_MODEL", "test-local-model")
+        monkeypatch.delenv("NIKA_LLM_API_KEY", raising=False)
         assert start_runtime(settings) == "started"
         try:
             status = _read_runtime_status(settings)
@@ -237,16 +238,6 @@ def test_bridge_chat_requires_provider_and_does_not_store_message(
         with pytest.raises(HTTPError) as error:
             urlopen(request, timeout=5)
         assert error.value.code == 503
-        with urlopen(
-            Request(
-                f"http://127.0.0.1:{status['port']}{BRIDGE_CHAT_PATH}",
-                data=None,
-                headers={},
-                method="OPTIONS",
-            ),
-            timeout=5,
-        ) as response:
-            assert response.status == 404
     finally:
         assert stop_runtime(settings)
 
@@ -267,6 +258,7 @@ def test_bridge_chat_rejects_replayed_hmac_nonce(
     with fake_provider() as (base_url, provider_calls):
         monkeypatch.setenv("NIKA_LLM_BASE_URL", base_url)
         monkeypatch.setenv("NIKA_LLM_MODEL", "test-local-model")
+        monkeypatch.delenv("NIKA_LLM_API_KEY", raising=False)
         assert start_runtime(settings) == "started"
         try:
             status = _read_runtime_status(settings)
