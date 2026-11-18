@@ -1,7 +1,7 @@
 # Nika Companion — durable project context / handoff
 
 Last updated: 2026-11-19
-Repository: `Dharma2500/Nika-Companion` (private)
+Repository: `Dharma2500/Nika-Companion` (**public**, verified 2026-11-19)
 Active development branch: `feature/companion-renderer-v0.4.0`
 Current draft PR: #1, targeting `main`
 Current Fabric target: **0.5.1**
@@ -172,15 +172,19 @@ Visual companion acceptance still required:
 
 ## 8. Next work (priority order)
 
-1. v0.5.1 fail-closed private chat safety patch is implemented. Current GitHub Actions failure is confirmed to occur before runner allocation: all actual jobs have `runner_id=0`, empty `runner_name`, `steps=[]`, and no logs. Check account billing/budget and repository Actions policy; if both are clean, escalate with run/job IDs to GitHub Support. Then obtain green Fabric + Python checks for the current head before JAR delivery.
-2. Update PR #1 description and this context file with exact latest commit/run/artifact state.
-3. On Vitaly's PC, configure and verify actual LM Studio URL/model ID using local environment only. Do not ask user to paste API keys.
-4. Manual Minecraft acceptance of private chat and no server leakage, especially provider-offline behavior.
-5. Improve provider diagnostics, budgets/failover and stable Nika personality/fallbacks.
-6. Add explicit user-controlled memory teaching/review (e.g. only save when Vitaly says "запомни" and confirm stored fact); never promote every model output automatically.
-7. Add fresh, scoped world observation context only after a freshness/scope contract.
-8. Voice only after text dialogue and memory are reliable.
-9. Skills/planning/permissioned actions much later; no autonomous world-changing behavior until action auth, capability checks, approval gates, emergency stop and disposable-world tests exist.
+1. **Build the local dashboard first.** Start with a loopback-only status/settings panel backed by the existing Python runtime. Keep the UI same-origin, do not load remote scripts/CDNs, and never return credentials or bridge control tokens to the browser.
+2. **Add safe provider configuration through the dashboard.** Provider URL/model may be stored as non-secret local configuration. API keys must go into an OS-backed credential store, never into Git, browser storage, logs, SQLite chat history or the dashboard's returned state. Show only configured/not configured.
+3. **Verify the local LM Studio connection.** Check the actual host and model ID on the machine running Nika. Do not ask Vitaly to paste tokens into chat.
+4. **Complete manual Minecraft acceptance** for private chat, no server leakage, N toggle, slash passthrough, offline local blocking, repeated messages and world transitions.
+5. **Strengthen the dialogue experience:** stable personality constitution, truthful fallback behavior, explicit memory teaching/review and provider budgets/diagnostics/failover.
+6. Add fresh, scoped world observation context only after a freshness/scope contract.
+7. Voice only after text dialogue and memory are reliable.
+8. Skills/planning/permissioned actions much later; no autonomous world-changing behavior until action auth, capability checks, approval gates, emergency stop and disposable-world tests exist.
+
+CI status before the next dashboard work:
+- Fabric v0.5.1 run #130 succeeded and uploaded artifact ID `14481446390`.
+- Python CI run #346 succeeded on all six OS/Python matrix jobs; each job ran 157 tests successfully. The dependent source-overlay job also succeeded.
+- These checks validate the code at source commit `69c6ac0d8ea0346ee43b77d2d80d043c70ec37b3`; later changes on this branch in this recovery segment are documentation-only.
 
 ## 9. Secrets and local configuration
 
@@ -192,7 +196,7 @@ Local environment names only: `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, optional `N
 The local data directory is outside repository; never migrate it or change its schema without a migration/backup plan.
 
 
-## 10. Latest CI runner diagnosis (2026-11-19)
+## 10. Historical CI runner diagnosis (superseded by section 13)
 
 Current state was rechecked against GitHub immediately before this handoff update:
 - PR #1 remains open, draft, base `main`, not merged. PR head and feature branch head both matched `578f3105f267c2f899ea2438d286869f1c197fe6` before this docs-only commit.
@@ -213,7 +217,7 @@ Current state was rechecked against GitHub immediately before this handoff updat
 - Do not add a fake code change, switch to a public repository, or deliver v0.5.0 in place of v0.5.1 just to bypass the runner failure. No v0.5.1 JAR artifact exists.
 - Next: wait for Vitaly's result from the billing/policy check; then retry a current-head workflow only after a relevant setting is corrected or support indicates recovery. Do not keep rerunning identical failures without new evidence.
 
-## 11. Recovery after interrupted conversation (2026-11-19)
+## 11. Historical recovery snapshot (superseded by section 13)
 
 This section records the live GitHub re-check performed after the previous ChatGPT conversation was interrupted.
 
@@ -282,3 +286,37 @@ The recovery check also corrected conflicting handoff documentation without touc
 - Vitaly will perform the visibility switch manually in GitHub: repository Settings → General → Danger Zone → Change repository visibility → Public, confirm the repository name and acknowledge the effects. Re-check repository metadata before proceeding with post-publication CI.
 - Current draft PR #1 remains open and unmerged. Do not merge it without explicit approval.
 - Next: verify visibility changed; inspect/enable secret-scanning push protection and review Actions logs; rerun CI only after the visibility/runner status has changed; then resume Nika implementation on the existing feature branch.
+
+
+## 13. Public repository and restored CI (2026-11-19)
+
+### Verified visibility and source-control state
+- GitHub repository metadata now reports visibility `public`.
+- Default branch remains `main`; active development remains `feature/companion-renderer-v0.4.0`.
+- PR #1 remains open, draft and unmerged. Do not merge without Vitaly's explicit approval.
+- Latest branch head before this documentation-only update: `495c20ae388867992fecf2f548507b5f7956439e`. Its source-code tree is the v0.5.1 implementation; the code commit remains `69c6ac0d8ea0346ee43b77d2d80d043c70ec37b3`.
+
+### GitHub Actions restored
+- The previous jobs were rerun after the repository became public. GitHub assigned standard hosted runners and executed all workflow steps.
+- Fabric run #130: [44419018875](https://github.com/Dharma2500/Nika-Companion/actions/runs/44419018875), job `135208138233`, **success**. Gradle wrapper validation, JDK 21 setup, Fabric build and artifact upload all passed.
+- Python CI run #346: [44419018898](https://github.com/Dharma2500/Nika-Companion/actions/runs/44419018898), **success**. All six jobs passed:
+  - Python 3.11, 3.12 and 3.13 on Ubuntu
+  - Python 3.11, 3.12 and 3.13 on Windows
+  - Each job collected and passed 157 tests; compileall and Ruff also passed.
+  - Dependent source-overlay archive job passed and uploaded its artifact.
+- Fabric JAR artifact: `nika-companion-fabric-1.21.11`, artifact ID `14481446390`, 30,301-byte ZIP, expires 2026-12-02 23:18 UTC.
+- The downloaded JAR was extracted and checked: valid ZIP/JAR, mod ID `nika_companion`, version `0.5.1`, environment `client`, client entrypoint `ru.vitaly.nika.NikaCompanionClient`, chat and renderer classes present. JAR size 31,822 bytes; SHA-256 `d1793fbe8e41a9c0d183b156dc28733ee042f0ec83d5e4e8b8285075e513334d`.
+- The prior runner-allocation blocker is therefore resolved for these observed workflows. Do not keep retrying run #130/#346; new code changes will trigger normal CI.
+
+### Public-repository security notes
+- Targeted current-branch review confirmed `.gitignore` excludes `.env`, `.env.*`, local NIKA_DATA, SQLite files, JSONL logs, key/certificate files and common runtime output. The checked provider configuration reads environment variables and contains no configured credential value. Security docs prohibit committing secrets.
+- Workflow files use `permissions: contents: read`, standard GitHub-hosted runners and ordinary `pull_request` triggers; no self-hosted runner or `pull_request_target` usage was found in the checked workflows.
+- Vitaly plans to add provider credentials only during later local dashboard setup. No credential has been intentionally added by this project work. Keep credentials local and use an OS-backed secret store once implemented.
+- This was a targeted review, **not a forensic scan of every historical blob, all 161 PR commits, external forks, or every past Actions log**. GitHub code search returned no matches for several common token markers, but indexing/search results are not proof of a clean history. If a real credential is ever discovered in history, revoke/rotate it; deleting it from the latest tree is insufficient.
+- GitHub's current documentation says secret scanning runs automatically for public repositories; repository-level push protection is not automatically enabled for every existing public repository. Push protection for users is on by default on GitHub.com unless disabled in account settings. Vitaly should verify repository **Settings → Security → Advanced Security** and enable the available secret-scanning alerts/push-protection controls. References: https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enable-secret-scanning and https://docs.github.com/en/code-security/concepts/secret-security/push-protection .
+- No source code was changed as part of this visibility/CI recovery; this section and the associated README/roadmap changes are documentation updates.
+
+### Remaining acceptance boundary
+- v0.5.1 is now CI-verified, and its JAR exists. This does **not** complete manual Minecraft acceptance.
+- Still required: install the v0.5.1 JAR in Fabric 1.21.11 with matching Fabric API, start the local Python runtime, then test private chat, local-only replies, N toggle, slash passthrough and provider-offline blocking. Never test private routing on a public server with sensitive text until the no-leak behavior has been verified.
+- The next development milestone is the local dashboard. Design/build it as a loopback-only surface; keep secrets outside Git and outside browser persistence.
