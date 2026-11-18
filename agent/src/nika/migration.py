@@ -36,6 +36,14 @@ def migrate_data_directory(settings: Settings, destination: Path) -> Path:
             "before using the automatic data migration."
         ) from error
 
+    try:
+        Path(settings.learning_path).resolve().relative_to(source)
+    except ValueError as error:
+        raise RuntimeError(
+            "NIKA_LEARNING_DIR is outside NIKA_DATA. Migrate that learning directory "
+            "separately or unset NIKA_LEARNING_DIR before migrating."
+        ) from error
+
     if target == source or target.is_relative_to(source) or source.is_relative_to(target):
         raise ValueError("Source and destination directories must not contain each other.")
     if target.exists():
@@ -105,7 +113,18 @@ def migrate_data_directory(settings: Settings, destination: Path) -> Path:
             )
 
         (staging / "runtime").mkdir(exist_ok=True)
-        (staging / "learning").mkdir(exist_ok=True)
+        learning_root = staging / Path(settings.learning_path).resolve().relative_to(source)
+        learning_root.mkdir(parents=True, exist_ok=True)
+        for directory in (
+            "datasets",
+            "base-models",
+            "adapters",
+            "checkpoints",
+            "runs",
+            "cache",
+            "exports",
+        ):
+            (learning_root / directory).mkdir(exist_ok=True)
         manifest = {
             "created_at": datetime.now(UTC).isoformat(),
             "source_data_directory": str(source),
