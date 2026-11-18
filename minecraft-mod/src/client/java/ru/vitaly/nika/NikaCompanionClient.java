@@ -13,8 +13,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Client-only entry point for Nika Companion.
  *
- * This first milestone deliberately registers no networking and performs no
- * world-changing actions. It provides a small, verifiable in-game foothold.
+ * Observations are collected only after an explicit /nika observe command.
+ * The client adapter never performs world-changing actions.
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
