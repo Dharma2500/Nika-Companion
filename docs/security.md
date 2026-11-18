@@ -66,7 +66,19 @@ timestamp, nonce and body hash. Requests outside a 60-second clock window or
 with a previously accepted nonce are rejected. The handshake does not expose
 Minecraft state, durable memory, chat history or world-changing actions.
 
-Before adding any request with a body, define a versioned schema, enforce the
-64 KiB protocol request ceiling and validate every field. World-changing
-operations remain disabled until capability checks, user approval and an
-emergency stop are implemented.
+The observation-v1 JSON Schema is defined at
+`docs/schemas/observation-v1.schema.json`. Its Python validator rejects
+duplicate keys, unknown properties, non-finite numbers, out-of-range values
+and unsupported versions; observation payloads have a stricter 8 KiB limit.
+The only planned fields are client/mod versions, dimension, player coordinates,
+health, food level and selected item identifier. Chat, inventory contents,
+server address, player identity and other players are excluded.
+
+The schema and validator do not by themselves enable observation. The HTTP
+endpoint and client-side submission remain disabled until their implementation
+and tests are complete. The first live observation is intended to be explicitly
+requested by the user, not continuously collected.
+
+World-changing operations remain disabled until capability checks, user
+approval, an emergency stop and disposable-world regression tests are
+implemented.
