@@ -78,7 +78,7 @@ def test_decode_observation_accepts_utf8_json() -> None:
         ),
         (
             lambda value: value["player"].update(x=30_000_001),
-            "between -3e+07 and 3e+07",
+            "finite and between",
         ),
         (
             lambda value: value["player"].update(y=2049),
@@ -86,7 +86,7 @@ def test_decode_observation_accepts_utf8_json() -> None:
         ),
         (
             lambda value: value["player"].update(z=float("inf")),
-            "between -3e+07 and 3e+07",
+            "finite and between",
         ),
         (
             lambda value: value["player"].update(x=True),
