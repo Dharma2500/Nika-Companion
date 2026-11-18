@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from nika.context import ContextBuildError, ContextBuilder
+from nika.context import ContextBuilder, ContextBuildError
 from nika.database import Database
 from nika.memory import (
     ConversationStore,
