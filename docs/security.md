@@ -27,7 +27,7 @@ messages. Treat logs as private local data and never commit or upload them.
 
 ## Runtime recovery
 
-A stale runtime status file is not sufficient evidence that the process is still alive. Startup verifies both the authenticated control endpoint and the recorded PID. If the PID is still alive but the endpoint is unresponsive, startup fails closed rather than launching a second process. Invalid status files are preserved for inspection. Startup exclusion uses an OS-level file lock held until the control endpoint is ready; the operating system releases it automatically if the starting process crashes. The lock file itself is a persistent coordination file, not evidence that a runtime is active.
+A stale runtime status file is not sufficient evidence that the process is still alive. Startup verifies both the authenticated control endpoint and the recorded PID. If the PID is still alive but the endpoint is unresponsive, startup fails closed rather than launching a second process. Invalid status files are preserved for inspection. Startup exclusion uses a Windows named mutex or a POSIX non-blocking file lock held until the control endpoint is ready; the operating system releases the lock if its owner exits. `start.lock` is only a diagnostic PID marker. Its presence or contents do not prove that a runtime is active.
 
 ## Database restore
 
