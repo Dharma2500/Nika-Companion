@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -32,6 +33,88 @@ _WINDOWS_MUTEX_HANDLES: dict[int, str] = {}
 
 START_TIMEOUT = 15.0
 STOP_TIMEOUT = 10.0
+
+BRIDGE_PROTOCOL_VERSION = 1
+BRIDGE_HELLO_PATH = "/bridge/v1/hello"
+BRIDGE_MAX_REQUEST_BYTES = 64 * 1024
+BRIDGE_MAX_CLOCK_SKEW_SECONDS = 60
+BRIDGE_NONCE_TTL_SECONDS = 120
+BRIDGE_MAX_TRACKED_NONCES = 4096
+
+
+def create_bridge_signature(
+    token: str,
+    method: str,
+    path: str,
+    timestamp: str,
+    nonce: str,
+    body: bytes = b"",
+) -> str:
+    """Create the protocol-v1 HMAC signature shared with the Minecraft client."""
+    body_hash = hashlib.sha256(body).hexdigest()
+    canonical = "\n".join(
+        (method.upper(), path, timestamp, nonce, body_hash)
+    ).encode("utf-8")
+    return hmac.new(token.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+
+
+class BridgeAuthenticator:
+    """Authenticate read-only bridge requests and reject timestamp/nonce replays."""
+
+    def __init__(self, token: str) -> None:
+        self._token = token
+        self._seen_nonces: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def verify(
+        self,
+        method: str,
+        path: str,
+        timestamp: str,
+        nonce: str,
+        signature: str,
+        body: bytes = b"",
+    ) -> bool:
+        if method.upper() != "GET" or path != BRIDGE_HELLO_PATH or body:
+            return False
+        if len(body) > BRIDGE_MAX_REQUEST_BYTES:
+            return False
+        if not timestamp.isascii() or not timestamp.isdecimal():
+            return False
+        if not 16 <= len(nonce) <= 128 or not nonce.isascii():
+            return False
+        if any(not (character.isalnum() or character in "-_") for character in nonce):
+            return False
+        if len(signature) != 64 or any(
+            character not in "0123456789abcdef" for character in signature
+        ):
+            return False
+
+        now = time.time()
+        issued_at = int(timestamp)
+        if abs(now - issued_at) > BRIDGE_MAX_CLOCK_SKEW_SECONDS:
+            return False
+
+        expected = create_bridge_signature(
+            self._token, method, path, timestamp, nonce, body
+        )
+        if not hmac.compare_digest(signature, expected):
+            return False
+
+        with self._lock:
+            expired = [
+                seen_nonce
+                for seen_nonce, expires_at in self._seen_nonces.items()
+                if expires_at < now
+            ]
+            for seen_nonce in expired:
+                self._seen_nonces.pop(seen_nonce, None)
+            if nonce in self._seen_nonces:
+                return False
+            if len(self._seen_nonces) >= BRIDGE_MAX_TRACKED_NONCES:
+                return False
+            self._seen_nonces[nonce] = now + BRIDGE_NONCE_TTL_SECONDS
+        return True
 
 
 def _runtime_dir(settings: Settings) -> Path:
@@ -490,6 +573,8 @@ def serve(foreground: bool = False) -> None:
             raise
 
     token = secrets.token_urlsafe(32)
+    bridge_token = secrets.token_urlsafe(32)
+    bridge_authenticator = BridgeAuthenticator(bridge_token)
     stop_event = threading.Event()
     shutdown_complete = threading.Event()
     _console_handler: tuple[Any, Any] | None = None
@@ -498,6 +583,15 @@ def serve(foreground: bool = False) -> None:
         def _authorized(self) -> bool:
             supplied = self.headers.get("X-Nika-Token", "")
             return secrets.compare_digest(supplied, token)
+
+        def _bridge_authorized(self) -> bool:
+            return bridge_authenticator.verify(
+                method=self.command,
+                path=self.path,
+                timestamp=self.headers.get("X-Nika-Bridge-Timestamp", ""),
+                nonce=self.headers.get("X-Nika-Bridge-Nonce", ""),
+                signature=self.headers.get("X-Nika-Bridge-Signature", ""),
+            )
 
         def _send(self, status_code: int, payload: dict[str, Any]) -> None:
             body = json.dumps(payload).encode("utf-8")
@@ -509,19 +603,50 @@ def serve(foreground: bool = False) -> None:
             self.wfile.write(body)
 
         def do_GET(self) -> None:
-            if self.path != "/status":
+            if self.path == "/status":
+                if not self._authorized():
+                    self._send(403, {"error": "unauthorized"})
+                else:
+                    self._send(
+                        200,
+                        {
+                            "state": "running",
+                            "pid": os.getpid(),
+                            "version": "0.1.0",
+                        },
+                    )
+                return
+
+            if self.path != BRIDGE_HELLO_PATH:
                 self._send(404, {"error": "not_found"})
-            elif not self._authorized():
+                return
+
+            raw_length = self.headers.get("Content-Length", "0")
+            if not raw_length.isascii() or not raw_length.isdecimal():
+                self._send(400, {"error": "invalid_content_length"})
+                return
+            content_length = int(raw_length)
+            if content_length > BRIDGE_MAX_REQUEST_BYTES:
+                self._send(413, {"error": "request_too_large"})
+                return
+            if content_length != 0 or self.headers.get("Transfer-Encoding") is not None:
+                self._send(400, {"error": "body_not_allowed"})
+                return
+            if not self._bridge_authorized():
                 self._send(403, {"error": "unauthorized"})
-            else:
-                self._send(
-                    200,
-                    {
-                        "state": "running",
-                        "pid": os.getpid(),
-                        "version": "0.1.0",
-                    },
-                )
+                return
+
+            self._send(
+                200,
+                {
+                    "service": "nika",
+                    "protocol_version": BRIDGE_PROTOCOL_VERSION,
+                    "state": "running",
+                    "pid": os.getpid(),
+                    "version": "0.1.0",
+                    "capabilities": ["health.read"],
+                },
+            )
 
         def do_POST(self) -> None:
             if self.path != "/stop":
@@ -547,6 +672,8 @@ def serve(foreground: bool = False) -> None:
             "pid": os.getpid(),
             "port": server.server_address[1],
             "token": token,
+            "bridge_token": bridge_token,
+            "bridge_protocol_version": BRIDGE_PROTOCOL_VERSION,
             "started_at": time.time(),
         }
         temporary_path.write_text(json.dumps(status_data), encoding="utf-8")

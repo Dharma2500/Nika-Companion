@@ -5,10 +5,11 @@ The Fabric 1.21.11 client-side component of the Nika-Companion project.
 ## Current milestone
 
 - Client-only Fabric mod entry point
-- Client command: `/nika status`
+- Client commands: `/nika status`, `/nika connect`
 - Reproducible Gradle wrapper build
 - GitHub Actions build artifact
-- No Python bridge, network listener, world observation or world-changing actions yet
+- Authenticated protocol-v1 read-only handshake via `/nika connect`
+- No world observation, chat transfer or world-changing actions yet
 
 ## Requirements
 
@@ -49,4 +50,7 @@ Expected status includes:
 - Python bridge: not connected
 - World observation: not enabled
 
-Those last two lines are intentional. They describe features that have not been implemented yet.
+The `/nika connect` command checks the Python runtime through the authenticated
+loopback handshake. Start the Python runtime first. The first protocol version
+only confirms service identity and health; it does not transmit world state,
+chat, or memory.

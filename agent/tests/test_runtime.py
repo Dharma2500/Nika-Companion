@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -7,6 +8,8 @@ import time
 import uuid
 from http.client import IncompleteRead
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 import pytest
 
@@ -275,4 +278,97 @@ def test_maintenance_lock_removes_dead_runtime_status(
 
     with runtime.runtime_maintenance_lock(settings):
         assert not status_path.exists()
+
+def _signed_bridge_request(
+    status: dict[str, object],
+    *,
+    timestamp: str | None = None,
+    nonce: str | None = None,
+    signature: str | None = None,
+) -> Request:
+    issued_at = timestamp or str(int(time.time()))
+    request_nonce = nonce or secrets.token_urlsafe(24)
+    request_signature = signature or runtime.create_bridge_signature(
+        str(status["bridge_token"]),
+        "GET",
+        runtime.BRIDGE_HELLO_PATH,
+        issued_at,
+        request_nonce,
+    )
+    return Request(
+        f"http://127.0.0.1:{status['port']}{runtime.BRIDGE_HELLO_PATH}",
+        headers={
+            "X-Nika-Bridge-Timestamp": issued_at,
+            "X-Nika-Bridge-Nonce": request_nonce,
+            "X-Nika-Bridge-Signature": request_signature,
+        },
+        method="GET",
+    )
+
+
+def test_bridge_v1_handshake_is_authenticated_and_replay_protected(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status_path = settings.data_dir / "runtime" / "status.json"
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        assert status["bridge_protocol_version"] == runtime.BRIDGE_PROTOCOL_VERSION
+        assert status["bridge_token"] != status["token"]
+
+        timestamp = str(int(time.time()))
+        nonce = secrets.token_urlsafe(24)
+        request = _signed_bridge_request(status, timestamp=timestamp, nonce=nonce)
+        with urlopen(request, timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+
+        assert payload["service"] == "nika"
+        assert payload["protocol_version"] == 1
+        assert payload["state"] == "running"
+        assert payload["pid"] == status["pid"]
+        assert payload["capabilities"] == ["health.read"]
+
+        replay = _signed_bridge_request(status, timestamp=timestamp, nonce=nonce)
+        with pytest.raises(HTTPError) as error:
+            urlopen(replay, timeout=2)
+        assert error.value.code == 403
+    finally:
+        assert stop_runtime(settings)
+
+
+def test_bridge_rejects_bad_signatures_and_expired_timestamps(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status = json.loads(
+            (settings.data_dir / "runtime" / "status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        bad_signature = _signed_bridge_request(
+            status,
+            signature="0" * 64,
+        )
+        with pytest.raises(HTTPError) as bad_signature_error:
+            urlopen(bad_signature, timeout=2)
+        assert bad_signature_error.value.code == 403
+
+        expired_timestamp = str(
+            int(time.time()) - runtime.BRIDGE_MAX_CLOCK_SKEW_SECONDS - 10
+        )
+        expired = _signed_bridge_request(status, timestamp=expired_timestamp)
+        with pytest.raises(HTTPError) as expired_error:
+            urlopen(expired, timeout=2)
+        assert expired_error.value.code == 403
+    finally:
+        assert stop_runtime(settings)
 

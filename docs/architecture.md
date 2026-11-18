@@ -119,3 +119,19 @@ decision for the future companion model.
 The target is a Fabric 1.21.11 client-side mod. Nika's companion rendering is local to Vitaly's client. The mod reports only data legitimately exposed to the client and forwards requests through a versioned localhost protocol. The Python agent independently validates every incoming message and action request.
 
 Protocol versioning, authentication of the local bridge, replay protection, payload limits and safe shutdown are required before enabling world-changing actions.
+
+### Protocol v1: read-only handshake
+
+The first bridge endpoint is `GET /bridge/v1/hello`, bound to IPv4 loopback only.
+It accepts an empty request and returns only the service identity, protocol version,
+runtime PID/version and the `health.read` capability. It does not read or transmit
+Minecraft world data and exposes no chat, memory, or action endpoint.
+
+Each runtime start creates a separate random bridge token. The client reads the
+token and ephemeral port from `NIKA_DATA/runtime/status.json`; it never receives
+the runtime control token. Requests are authenticated with HMAC-SHA256 over the
+uppercase method, exact path, Unix timestamp, random nonce and SHA-256 body hash.
+The Python runtime checks a 60-second clock window and rejects each nonce after
+its first valid use. The initial endpoint permits no request body. Future event
+or action endpoints must define explicit versioned JSON schemas, strict size
+limits and capability checks before they are added.

@@ -44,8 +44,10 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 ## Phase 2: Minecraft client integration
 
 - [x] Fabric 1.21.11 client mod skeleton and reproducible JAR build (CI verified on JDK 21)
-- [ ] Versioned localhost protocol
-- [ ] Bridge authentication, payload validation and replay protection
+- [x] Versioned localhost protocol v1 with a read-only handshake
+- [x] Dedicated bridge token, HMAC-SHA256 authentication and nonce replay protection
+- [ ] Versioned JSON payload schemas and strict validation for future observation requests
+- [ ] Action-request authentication, capability validation and approval gates
 - [ ] Client-only companion renderer
 - [ ] Capability discovery and read-only observation first
 

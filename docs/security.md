@@ -57,4 +57,16 @@ The mod must not bypass anti-cheat, access hidden server data, impersonate other
 
 ## Local bridge
 
-Before enabling actions, the bridge must bind to loopback only, authenticate its client, validate message schemas and size limits, reject replayed requests, and provide an emergency stop. No public network listener is required for the initial design.
+The current protocol-v1 endpoint is read-only: an empty signed `GET /bridge/v1/hello`
+returns runtime identity and the `health.read` capability only. It binds to
+`127.0.0.1`; no public network listener is created. A dedicated random bridge
+token is generated per runtime start and kept separate from the runtime
+start/stop control token. HMAC-SHA256 signatures include the method, exact path,
+timestamp, nonce and body hash. Requests outside a 60-second clock window or
+with a previously accepted nonce are rejected. The handshake does not expose
+Minecraft state, durable memory, chat history or world-changing actions.
+
+Before adding any request with a body, define a versioned schema, enforce the
+64 KiB protocol request ceiling and validate every field. World-changing
+operations remain disabled until capability checks, user approval and an
+emergency stop are implemented.

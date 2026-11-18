@@ -1,6 +1,7 @@
 package ru.vitaly.nika;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.minecraft.client.Minecraft;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.network.chat.Component;
@@ -23,7 +24,9 @@ public final class NikaCompanionClient implements ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
             dispatcher.register(ClientCommandManager.literal("nika")
                 .executes(context -> {
-                    context.getSource().sendFeedback(Component.literal("Nika Companion: use /nika status"));
+                    context.getSource().sendFeedback(
+                        Component.literal("Nika Companion: use /nika status or /nika connect")
+                    );
                     return 1;
                 })
                 .then(ClientCommandManager.literal("status")
@@ -32,10 +35,28 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             Nika Companion %s
                             Minecraft target: %s
                             Client mod: active
-                            Python bridge: not connected
+                            Python bridge: %s
                             World observation: not enabled
-                            """.formatted(MOD_VERSION, MINECRAFT_VERSION);
+                            """.formatted(MOD_VERSION, MINECRAFT_VERSION, BridgeClient.getLastStatus());
                         context.getSource().sendFeedback(Component.literal(status));
+                        return 1;
+                    }))
+                .then(ClientCommandManager.literal("connect")
+                    .executes(context -> {
+                        context.getSource().sendFeedback(
+                            Component.literal("Nika: checking the local Python bridge...")
+                        );
+                        BridgeClient.connect().thenAccept(message ->
+                            Minecraft.getInstance().execute(() -> {
+                                if (Minecraft.getInstance().player != null) {
+                                    Minecraft.getInstance().player.displayClientMessage(
+                                        Component.literal(message), false
+                                    );
+                                } else {
+                                    LOGGER.info(message);
+                                }
+                            })
+                        );
                         return 1;
                     }))
             )
