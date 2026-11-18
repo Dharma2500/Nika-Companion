@@ -1,7 +1,52 @@
-# Minecraft client mod
+# Nika Companion: Fabric client mod
 
-Target: Fabric 1.21.11, client-side.
+The Fabric 1.21.11 client-side component of the Nika-Companion project.
 
-The mod has not been scaffolded yet. It will render Nika locally and communicate with the Python agent through a versioned loopback protocol. No server-side mob or server installation is required for the companion renderer.
+## Current milestone
 
-The Fabric Gradle build workflow is prepared to run when a Gradle wrapper is added to this directory.
+- Client-only Fabric mod entry point
+- Client command: `/nika status`
+- Reproducible Gradle wrapper build
+- GitHub Actions build artifact
+- No Python bridge, network listener, world observation or world-changing actions yet
+
+## Requirements
+
+- Minecraft Java Edition 1.21.11
+- Fabric Loader 0.19.5 or newer
+- Fabric API for Minecraft 1.21.11
+- JDK 21 for local development
+
+The mod is client-only. The `/nika status` command runs locally and does not require server permissions.
+
+## Build on Windows
+
+From this directory:
+
+```powershell
+.\gradlew.bat build
+```
+
+The remapped mod JAR is written to:
+
+```
+build/libs/nika-companion-0.1.0.jar
+```
+
+Copy that JAR and a matching Fabric API build into the `mods` folder of the Fabric 1.21.11 game profile.
+
+## In-game check
+
+Run:
+
+```
+/nika status
+```
+
+Expected status includes:
+
+- Client mod: active
+- Python bridge: not connected
+- World observation: not enabled
+
+Those last two lines are intentional. They describe features that have not been implemented yet.

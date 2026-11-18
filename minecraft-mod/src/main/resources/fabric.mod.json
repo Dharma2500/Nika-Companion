@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "nika_companion",
+  "version": "${version}",
+  "name": "Nika Companion",
+  "description": "Client-side foundation for the Nika AI companion.",
+  "authors": [
+    "Vitaly Sokolov"
+  ],
+  "contact": {
+    "sources": "https://github.com/Dharma2500/Nika-Companion"
+  },
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "ru.vitaly.nika.NikaCompanionClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
