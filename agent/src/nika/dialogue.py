@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from uuid import UUID
 from typing import Any
+from uuid import UUID
 
 MAX_CHAT_REQUEST_BYTES = 16 * 1024
 MAX_CHAT_MESSAGE_CHARS = 4000
@@ -86,7 +86,10 @@ def decode_chat_request(body: bytes) -> ChatRequest:
         raise ChatValidationError(
             f"Chat request contains unsupported properties: {', '.join(sorted(extra))}."
         )
-    if type(payload["schema_version"]) is not int or payload["schema_version"] != CHAT_SCHEMA_VERSION:
+    if (
+        type(payload["schema_version"]) is not int
+        or payload["schema_version"] != CHAT_SCHEMA_VERSION
+    ):
         raise ChatValidationError("Unsupported chat schema version.")
 
     request_id = _validate_uuid(payload["request_id"], "request_id")
