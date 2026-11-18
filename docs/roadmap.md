@@ -89,7 +89,7 @@ Design baseline: `docs/memory-dialogue-design.md`.
 - [x] Plain-text Minecraft chat routing: no `/nika ask`, no per-message prefix
   - [x] Local Nika-chat mode enabled when the companion is summoned
   - [x] Configurable key binding (default N) to toggle private Nika chat vs public server chat
-  - [x] Ordinary messages canceled before server send while private mode is active and `dialogue.chat` is available
+  - [x] Ordinary messages are intercepted whenever private mode is active; sent only to the local bridge when `dialogue.chat` is available, otherwise blocked locally
   - [x] Slash commands and existing client commands remain unaffected
   - [x] Show routing state; when bridge/provider is unavailable in private mode, block locally with a warning and require an explicit N toggle to use server chat
   - [x] Display user echo and assistant replies only in the local client chat
