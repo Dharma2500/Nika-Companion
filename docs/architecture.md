@@ -74,7 +74,7 @@ A fact about one world must not silently become a fact about every world. A reus
 - SQLite is the initial source of truth for structured local data.
 - Schema changes are numbered migrations. Unknown future schema versions must never be downgraded automatically.
 - SQLite uses foreign keys, a busy timeout and WAL mode for local concurrency.
-- Backups and restore verification will be implemented before memory is considered production-safe.
+- SQLite backups use the online backup API. Restore requires the caller to hold the runtime maintenance lock, validates integrity and exact schema compatibility, captures the previous database plus SQLite sidecars, stages the selected backup beside the target, and swaps it atomically. Failed post-install validation triggers rollback from the retained safety copy.
 - NIKA_DATA is outside the Git repository by default.
 - Runtime startup uses an OS-level file lock held until its authenticated control endpoint is ready. The operating system releases this lock automatically if the starter crashes. Stale status metadata is checked against both the authenticated endpoint and recorded PID; dead-process status is atomically replaced by the next runtime.
 
