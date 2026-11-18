@@ -111,7 +111,7 @@ restore.
 Use the built-in migration command instead of copying a live SQLite directory by hand:
 
 ~~~powershell
-.\\.venv\\scripts\\python.exe -m nika.cli migrate-data "D:\\NIKA_DATA"
+.\.venv\scripts\python.exe -m nika.cli migrate-data "D:\NIKA_DATA"
 ~~~
 
 The command creates a fresh verified database backup, reserves the runtime
@@ -124,8 +124,8 @@ location. The original data directory is never deleted or modified.
 After verifying the migration, set the persistent Windows user variable:
 
 ~~~powershell
-[Environment]::SetEnvironmentVariable('NIKA_DATA', 'D:\\NIKA_DATA', 'User')
-$env:NIKA_DATA = 'D:\\NIKA_DATA'
+[Environment]::SetEnvironmentVariable('NIKA_DATA', 'D:\NIKA_DATA', 'User')
+$env:NIKA_DATA = 'D:\NIKA_DATA'
 ~~~
 
 Open a new PowerShell window after setting the user variable. Keep the old
