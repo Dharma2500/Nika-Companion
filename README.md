@@ -18,7 +18,7 @@ The project is built in small, testable layers. The local agent and persistent m
 | Area | Status |
 |---|---|
 | Python package skeleton | Initial implementation |
-| Persistent SQLite memory | Initial schema and event journal |
+| Persistent SQLite memory | Schema v2; provenance-aware MemoryStore, ConversationStore and bounded ContextBuilder implemented; legacy v1 records preserved |
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
 | Fabric 1.21.11 client mod | Client-only mod v0.4.5; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures and critically damped inertial movement-direction follow with smoothly randomized slow/fast pace phases; Fabric build CI verified, v1/v2/v3 local persistence verified on Vitaly's Windows machine |
