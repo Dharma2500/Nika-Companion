@@ -24,6 +24,7 @@ import java.net.http.HttpResponse;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Authenticated, loopback-only client for the local Python runtime.
@@ -37,6 +38,8 @@ final class BridgeClient {
     private static final String OBSERVE_PATH = "/bridge/v1/observe";
     private static final long MAX_STATUS_FILE_BYTES = 16 * 1024;
     private static final int MAX_OBSERVATION_BYTES = 8 * 1024;
+    private static final long AUTO_CONNECT_RETRY_NANOS = Duration.ofSeconds(5).toNanos();
+    private static final AtomicBoolean AUTO_CONNECT_IN_PROGRESS = new AtomicBoolean();
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(2))
@@ -49,7 +52,8 @@ final class BridgeClient {
         return thread;
     });
 
-    private static volatile String lastStatus = "not checked (run /nika connect)";
+    private static volatile String lastStatus = "waiting for local runtime (automatic reconnect enabled)";
+    private static volatile long lastAutoConnectAttemptNanos;
     private static volatile String lastObservationStatus = "not sent";
 
     private BridgeClient() {
@@ -65,6 +69,30 @@ final class BridgeClient {
 
     static CompletableFuture<String> connect() {
         return CompletableFuture.supplyAsync(BridgeClient::performHandshake, IO);
+    }
+
+    /**
+     * Keep the local bridge connected without requiring a manual command.
+     * The check is throttled and serialized; failed attempts are retried so
+     * Nika also connects when the Python runtime starts after Minecraft.
+     */
+    static void ensureConnected() {
+        long now = System.nanoTime();
+        long previousAttempt = lastAutoConnectAttemptNanos;
+        if (previousAttempt != 0L && now - previousAttempt < AUTO_CONNECT_RETRY_NANOS) {
+            return;
+        }
+        if (!AUTO_CONNECT_IN_PROGRESS.compareAndSet(false, true)) {
+            return;
+        }
+
+        lastAutoConnectAttemptNanos = now;
+        connect().whenComplete((message, error) -> {
+            if (error != null) {
+                lastStatus = "unavailable";
+            }
+            AUTO_CONNECT_IN_PROGRESS.set(false);
+        });
     }
 
     static CompletableFuture<String> submitObservation(JsonObject observation) {
