@@ -137,9 +137,9 @@ def test_decode_observation_rejects_oversized_body() -> None:
 
 
 def test_decode_observation_rejects_non_finite_exponent() -> None:
-    payload = sample_observation()
-    payload["player"]["x"] = 1e999
-    body = json.dumps(payload).encode("utf-8")
+    body = json.dumps(sample_observation()).replace(
+        '"x": 125.5', '"x": 1e999'
+    ).encode("utf-8")
 
     with pytest.raises(ObservationValidationError, match="finite"):
         decode_observation(body)
