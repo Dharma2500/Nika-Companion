@@ -40,6 +40,8 @@ The first doctor run creates the local data directory and initializes SQLite. By
 
 Before initializing SQLite, `nika doctor` validates the configured paths and checks that the data, logs, backups, runtime and database locations are usable. Empty `NIKA_DATA` or `NIKA_DATABASE_PATH` variables are treated as configuration errors instead of silently falling back to defaults. A database deliberately stored outside `NIKA_DATA` is allowed, but doctor reports that logs, runtime state and backups remain under `NIKA_DATA`.
 
+Learning assets use `NIKA_DATA/learning` by default. This is where future datasets, base models, adapters, checkpoints, experiments and model exports belong. Set `NIKA_LEARNING_DIR` only when you deliberately want those files on a different volume.
+
 Operational logs are written as structured JSON Lines under `NIKA_DATA/logs/`: the CLI uses `cli.jsonl`, and the background service uses `runtime.jsonl`. Each log is limited to 2 MiB plus five rotated files. Known credential fields and common token formats are redacted before writing.
 
 **Windows PowerShell**
@@ -103,6 +105,36 @@ and any SQLite WAL/SHM/journal sidecars are copied to
 staged and verified before an atomic swap; a failed post-swap check triggers
 automatic rollback. Add `--yes` only when running an intentional non-interactive
 restore.
+
+## Moving Nika data to another disk
+
+Use the built-in migration command instead of copying a live SQLite directory by hand:
+
+~~~powershell
+.\\.venv\\scripts\\python.exe -m nika.cli migrate-data "D:\\NIKA_DATA"
+~~~
+
+The command creates a fresh verified database backup, reserves the runtime
+maintenance lock, gracefully stops a responsive runtime, copies the complete
+data directory and learning assets, and uses SQLite's online backup API for
+the active database. The copied database is checked before the destination is
+published. Runtime status and lock files are deliberately recreated at the new
+location. The original data directory is never deleted or modified.
+
+After verifying the migration, set the persistent Windows user variable:
+
+~~~powershell
+[Environment]::SetEnvironmentVariable('NIKA_DATA', 'D:\\NIKA_DATA', 'User')
+$env:NIKA_DATA = 'D:\\NIKA_DATA'
+~~~
+
+Open a new PowerShell window after setting the user variable. Keep the old
+directory until the new location has been used and backed up successfully.
+
+The `backup` command currently protects the SQLite database only. Large model
+weights, datasets and learning runs live under `learning` and need their own
+versioned/offline backup policy; they are copied during a full data-directory
+migration but are not duplicated by every database backup.
 
 ## Security boundary
 
