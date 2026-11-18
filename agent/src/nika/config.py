@@ -86,6 +86,9 @@ def diagnose_settings(settings: Settings) -> tuple[ConfigDiagnostic, ...]:
         )
 
     _check_directory(data_dir, "NIKA_DATA", findings)
+    _check_directory(data_dir / "logs", "Logs directory", findings)
+    _check_directory(data_dir / "backups", "Backups directory", findings)
+    _check_directory(data_dir / "runtime", "Runtime directory", findings)
     _check_directory(database_path.parent, "Database parent directory", findings)
 
     if database_path.exists():
