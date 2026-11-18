@@ -29,3 +29,12 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Updated architecture, roadmap, README and the project continuity handoff.
 - Plain Minecraft dialogue still remains unimplemented: no local provider integration, no `/bridge/v1/chat`, no client chat interception yet. The user requirement remains ordinary unprefixed text, private routing by default while Nika is summoned, keybind toggle for server chat, and slash commands untouched.
 - Current validation is running on the latest feature branch head. Check GitHub Actions before calling the milestone green.
+
+## 2026-11-19: legacy backup compatibility and green CI
+
+- Fixed schema-v1 backup restore after the SQLite database moved to schema v2. Restore validates the legacy backup, copies it to a temporary staging file, migrates that copy with the normal database migrations, checkpoints WAL and switches to DELETE journal mode before atomic replacement.
+- The original selected backup file remains unchanged. Schema 0 and future unsupported versions are rejected.
+- Added regression test covering legacy event and memory preservation, cautious `hypothesis` provenance on migrated memory, schema-v2 active database and unchanged schema-v1 source backup.
+- Current validation at branch head `577d9450b7f1334959304f79fb2c78b57826fd09`: Python CI 44408464677 passed all six Python/OS matrix jobs and source overlay; Fabric build 44408464712 passed.
+- No new JAR is produced for this milestone because the Fabric client code did not change.
+- Next: provider-independent OpenAI-compatible adapter with explicit configuration and fake-server tests; then authenticated chat route; then Fabric private unprefixed text chat. Verify the actual LM Studio host/model on the Nika runtime PC before setting values.
