@@ -135,3 +135,19 @@ The Python runtime checks a 60-second clock window and rejects each nonce after
 its first valid use. The initial endpoint permits no request body. Future event
 or action endpoints must define explicit versioned JSON schemas, strict size
 limits and capability checks before they are added.
+
+### Observation payload v1 contract
+
+The JSON Schema is maintained at
+`docs/schemas/observation-v1.schema.json`. The Python standard-library
+validator in `nika.observation` mirrors that contract and rejects duplicate
+JSON keys, non-standard numeric constants, non-finite numbers, unknown
+properties, unsupported versions and out-of-range values. The encoded body is
+limited to 8 KiB.
+
+The payload contains only the client Minecraft/mod versions, current dimension,
+player coordinates, health, food level and selected item identifier. It does
+not include chat, inventory contents, server address, player identity or other
+players. The schema and validator are implemented and tested; no observation
+HTTP endpoint or automatic polling is enabled yet. The first live observation
+will be an explicit user-triggered snapshot.
