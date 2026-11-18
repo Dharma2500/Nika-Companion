@@ -91,7 +91,7 @@ class BackupManager:
         schema_version = self._schema_version(source)
         if not 1 <= schema_version <= SCHEMA_VERSION:
             raise RuntimeError(
-                f"Restore requires a supported schema from 1 to {SCHEMA_VERSION}; "
+                f"Restore requires schema 1 through {SCHEMA_VERSION}; "
                 f"the selected backup uses schema {schema_version}."
             )
         return source
