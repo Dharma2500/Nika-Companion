@@ -85,15 +85,15 @@ Design baseline: `docs/memory-dialogue-design.md`.
 - [x] Provider interface and OpenAI-compatible adapter with explicit environment configuration, timeouts, response bounds and fake-server tests
 - [ ] Verify an OpenAI-compatible local LM Studio endpoint and actual model ID on the PC running the Nika runtime
 - [ ] Complete provider manager with budgets, failover/rotation, diagnostics and graceful degradation
-- [ ] Authenticated `POST /bridge/v1/chat` endpoint with strict schema, payload limits, HMAC and replay protection
-- [ ] Plain-text Minecraft chat routing: no `/nika ask`, no per-message prefix
-  - [ ] Local Nika-chat mode enabled when the companion is summoned
-  - [ ] Configurable key binding to toggle private Nika chat vs public server chat
-  - [ ] Ordinary messages canceled before server send while private mode is active
-  - [ ] Slash commands and existing client commands remain unaffected
-  - [ ] Show local chat-mode state; if bridge is offline, do not silently swallow messages
-  - [ ] Display assistant replies only in the local client chat
-- [ ] Verify private routing, no server leakage, mode toggle, slash passthrough, offline fallback and duplicate-message protection
+- [x] Authenticated `POST /bridge/v1/chat` endpoint with strict schema, 16 KiB payload bound, HMAC/replay protection and request-id idempotency
+- [x] Plain-text Minecraft chat routing: no `/nika ask`, no per-message prefix
+  - [x] Local Nika-chat mode enabled when the companion is summoned
+  - [x] Configurable key binding (default N) to toggle private Nika chat vs public server chat
+  - [x] Ordinary messages canceled before server send while private mode is active and `dialogue.chat` is available
+  - [x] Slash commands and existing client commands remain unaffected
+  - [x] Show routing state; when bridge/provider is unavailable, fall back to server chat with a local warning
+  - [x] Display user echo and assistant replies only in the local client chat
+- [ ] Verify in Minecraft 1.21.11: private message/reply never reaches server, N toggle works, slash passthrough, provider-offline fallback and chat-mode behavior during world transitions
 - [ ] Explicit memory teaching/review flow; no silent automatic promotion of every model statement
 - [ ] Versioned skill format and user demonstration capture
 
