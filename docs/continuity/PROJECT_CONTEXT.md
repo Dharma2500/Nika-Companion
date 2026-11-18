@@ -179,7 +179,30 @@ Schema v2 details:
 - Fabric build run 44408464712: **success**.
 - Source overlay artifact ID 14475307885. No new Minecraft JAR was required because this milestone changed Python and documentation, not Fabric mod code. Continue delivering a new JAR only when a new mod build artifact exists.
 
-Next implementation step: add a provider-independent OpenAI-compatible chat adapter with explicit environment configuration, bounded timeouts/responses and fake-server tests. Do not assume the actual LM Studio endpoint or model name until verified on the PC running the Nika Python runtime. After the provider adapter, add the authenticated chat endpoint, then implement the Fabric private plain-text chat routing.
+## 6.2 Provider adapter implemented on 2026-11-19
+
+Files:
+- `agent/src/nika/provider.py`
+- `agent/tests/test_provider.py`
+
+Implemented:
+- `ProviderConfig`, `load_provider_config`, `OpenAICompatibleProvider`, `ProviderManager`.
+- Explicit configuration variables: `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, optional `NIKA_LLM_API_KEY`. No endpoint, model ID or key is hard-coded.
+- OpenAI-compatible `POST {base_url}/chat/completions` via Python standard library `urllib`; no additional HTTP package.
+- Validates HTTP(S) base URL without embedded credentials, query or fragment.
+- Bounds timeout (1–120 sec), model name (160 chars), request body (32 KiB), response body (64 KiB), assistant reply (12,000 chars), tokens (1–4096) and temperature (0–2).
+- Sanitizes provider errors; does not include API key, user prompt or raw provider response in diagnostics.
+- Adds explicit context instructions treating messages/memories/world observations as data, not instructions that can override Nika's rules.
+- Provider tests use a fake local HTTP server; no real model endpoint has yet been configured or tested.
+- `ProviderManager` currently wraps one optional provider. Budgets, failover/rotation and full degraded-mode orchestration are still pending.
+
+Validation:
+- Code commit introducing the adapter: `87fec3ecb9fd580b0f96e3c689962d6515a70c2e`.
+- Python CI run 44409119993: success across Python 3.11, 3.12 and 3.13 on Ubuntu and Windows; compile, Ruff, tests and source overlay passed.
+- Fabric build run 44409120014: success. No new JAR was required because this milestone changed only Python and documentation.
+- Provider adapter is CI-verified, but a real LM Studio connection is NOT yet verified.
+
+Next: verify the actual LM Studio host and model ID on the machine running Nika. Check the local `/v1/models` endpoint and use its exact model ID. Configure the three environment variables only locally, never in Git. Then implement authenticated `POST /bridge/v1/chat`, persist the user message before model work, assemble ContextBuilder output, persist the assistant reply and return it to the Fabric client. Finally implement ordinary private chat using Fabric's outgoing-chat allow event, a configurable key binding to toggle public server chat, local-only replies and slash-command passthrough.
 
 ## 7. Next development milestone: Nika Intelligence 0.5.x
 
@@ -243,11 +266,12 @@ Voice input/output and proactive initiative follow only after text dialogue is r
 
 ## 9. Immediate next actions
 
-1. Read `docs/memory-dialogue-design.md`.
-2. Check active branch head and PR state from GitHub.
-3. Correct the hard-coded mod-version inconsistency when the next Fabric release is touched.
-4. Implement database schema migration 2 and tests.
-5. Implement MemoryStore/ConversationStore.
-6. Implement ContextBuilder with deterministic tests.
-7. Update this file and `CHAT_LOG.md` on each substantive turn.
-8. Only after Python foundation passes CI, proceed to provider and chat bridge.
+1. Check active branch head, PR #1 and Actions state before editing.
+2. Verify LM Studio is reachable on the actual PC running the Nika Python runtime; request the exact model ID from the local `/v1/models` endpoint.
+3. Configure `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, and optional `NIKA_LLM_API_KEY` locally. Never commit the key.
+4. Add a provider diagnostic command/report that does not expose credentials or chat content.
+5. Implement authenticated `POST /bridge/v1/chat` with strict schema, 16 KiB payload bound, 4,000-char user message ceiling, HMAC/replay checks and request-id idempotency.
+6. Persist the user message before provider work, call ContextBuilder and ProviderManager outside write transactions, then persist and return the assistant reply.
+7. Implement Fabric ordinary chat interception: local private mode while Nika is summoned, configurable key binding (default N) for public server chat, slash commands untouched, visible routing status, local-only reply display and automatic fallback to server chat if bridge is unavailable.
+8. Fix hard-coded `MOD_VERSION = "0.4.2"` in `NikaCompanionClient.java` before the next Fabric JAR; preferably derive it from Fabric metadata.
+9. Update this file and `CHAT_LOG.md` after each substantive Nika project response.
