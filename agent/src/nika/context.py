@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from nika.memory import ConversationStore, MemoryStore, MemoryValidationError
+from nika.memory import ConversationStore, MemoryStore
 
 CONTEXT_SCHEMA_VERSION = 1
 DEFAULT_MAX_CONTEXT_BYTES = 12 * 1024
