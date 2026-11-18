@@ -17,7 +17,13 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Verify detached local runtime with authenticated loopback control
 - [x] Verify start, status and graceful stop commands
 - [x] Verify Windows batch launch and graceful console-close shutdown
-- [ ] Restore workflow with safe shutdown protection
+- [ ] Restore workflow with safe shutdown protection (awaiting Windows verification)
+  - [x] Validate restore integrity and exact schema compatibility
+  - [x] Preserve pre-restore database and SQLite sidecars
+  - [x] Stage and atomically replace the database
+  - [x] Automatic rollback tests for failed replacement and post-install validation
+  - [x] Runtime shutdown guard and end-to-end CLI restore test
+  - [ ] Verify restore CLI on Windows with a disposable data directory
 - [x] Structured JSONL logging with secret redaction and rotation
 - [x] Verify secret redaction in messages, structured fields and tracebacks
 - [x] Verify CLI and runtime logs use separate process-owned files
