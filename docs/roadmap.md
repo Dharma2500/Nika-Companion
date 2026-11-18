@@ -62,8 +62,12 @@ Work proceeds by verified milestones. A milestone is not complete until its test
   - [x] Verify v3 observation and SQLite persistence on Vitaly's Windows machine
 - [ ] Client-only companion renderer
   - [x] Add a render-only vanilla Allay instance that is never inserted into ClientLevel
-  - [x] Add local `/nika companion on|off` command
-  - [ ] Verify visual rendering, follow position and world-transition cleanup in Minecraft 1.21.11
+  - [x] Add fixed idle anchor so looking at Nika does not move her around the player
+  - [x] Follow to the right/rear using actual horizontal movement direction
+  - [x] Add damped-spring follow motion and long-distance recovery
+  - [x] Add automatic authenticated bridge connection and retry
+  - [x] Add `/nika` and `/ника` summon commands plus dismiss aliases
+  - [ ] Verify rendering, idle visibility, follow smoothness and world-transition cleanup in Minecraft 1.21.11
 - [ ] Action-request authentication, capability validation and approval gates
 
 ## Phase 3: memory, skills and dialogue
