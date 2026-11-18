@@ -155,7 +155,9 @@ canceled before multiplayer server send, forwarded asynchronously to the
 loopback bridge, and the reply is displayed locally. A configurable key binding
 (default N) switches back to public server chat. Slash commands use their
 separate event path and are not intercepted. If the provider is unavailable
-before send, the client falls back to public server chat with a local warning.
+before send, the client blocks the ordinary message locally and shows a warning.
+The text is never sent to the server while private mode is active; the user must
+explicitly press the N toggle to switch to public server chat.
 Live Minecraft privacy and input-flow acceptance tests are still required.
 
 ## API degradation
