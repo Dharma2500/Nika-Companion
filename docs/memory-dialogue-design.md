@@ -127,8 +127,8 @@ The provider interface will be OpenAI-compatible and provider-independent. Local
 
 ## Implementation status
 
-Implemented in the current feature branch:
-- SQLite schema migration 2. Existing v1 memories are preserved; legacy rows receive compatibility defaults and are not marked verified.
+Implemented in the current feature branch and released as Fabric v0.5.0:
+- SQLite schema migration 2. Existing v1 memories are preserved; legacy rows receive cautious `hypothesis` provenance.
 - Typed `MemoryStore`: add/get/recent/search with provenance, confidence, tags and global/world scope.
 - Typed `ConversationStore`: conversation creation, ordered history retrieval, bounded message validation and request-id idempotency.
 - Deterministic `ContextBuilder`: stable personality instructions, recent history, relevant memories with provenance labels and a hard UTF-8 byte budget.
@@ -138,23 +138,31 @@ Implemented in the current feature branch:
 - OpenAI-compatible `/chat/completions` request via Python standard library, without third-party HTTP dependencies.
 - Bounded provider timeout (1–120 seconds), request payload (32 KiB), response body (64 KiB), reply text (12,000 characters), model name, token limit and temperature.
 - Sanitized provider errors; request/response body and API key are not written to diagnostics logs.
-- Fake local HTTP-server tests cover config validation, response parsing, payload shape, HTTP errors and oversized output.
+- Fake local HTTP-server tests cover provider config validation, response parsing, payload shape, HTTP errors and oversized output.
+- Strict `POST /bridge/v1/chat` validates schema v1, duplicate/unknown fields, canonical UUIDs, UTF-8, a 4,000-character message ceiling and 16 KiB request ceiling.
+- The chat route reuses bridge HMAC-SHA256 authentication, timestamp window and nonce replay protection.
+- User messages are persisted before provider work; assistant replies are persisted after validation. Provider calls happen outside SQLite write transactions.
+- Request IDs provide idempotency: retrying the same ID and same content returns the stored assistant reply without a second model call; reusing an ID with different content returns HTTP 409.
+- When no provider is configured, the route returns HTTP 503 before persisting the user message. Chat bodies are never written to runtime logs.
+- The bridge advertises `dialogue.chat` only when a provider was explicitly configured at runtime startup.
+- Fabric v0.5.0 intercepts ordinary outgoing chat only in private Nika mode and only when `dialogue.chat` is available. Messages are canceled before server send and replies are displayed locally; slash commands remain on their separate path.
+- Summoning Nika enables private chat. A configurable key binding (default N, visible in Controls) switches to public server chat. If the provider/bridge is unavailable before send, the client falls back to public chat with a local warning. If a request fails after interception, a local error says the text was not sent to the server.
+- The conversation UUID is local to the current client-world session and resets when the client level changes.
 
-Not implemented yet:
-- Verification/configuration of the real LM Studio endpoint and model ID on the PC running Nika.
+Not implemented or not yet verified:
+- The actual LM Studio endpoint and exact model ID on the PC running the Nika Python runtime have not been checked or configured.
 - Full provider budgets, failover/rotation and automatic mode selection.
-- Authenticated chat endpoint.
-- Fabric chat input interception, key binding and local response rendering.
-- Automatic memory extraction or voice.
+- Manual in-game acceptance of private routing, no server leakage, key binding, slash passthrough, provider-offline fallback and world transitions.
+- Automatic memory extraction, voice and autonomous Minecraft actions.
 
 ## Implementation order
 
-1. Database schema migration 2 and tests.
-2. Typed ConversationStore and MemoryStore APIs.
-3. Deterministic ContextBuilder and tests for provenance, scope, freshness and budgets.
-4. [x] Provider interface plus explicit environment configuration and bounded OpenAI-compatible adapter with fake-server tests. Verify the real LM Studio endpoint/model before enabling it.
-5. Strict chat request/response schema and authenticated `/bridge/v1/chat` endpoint.
-6. Fabric chat routing and local reply rendering.
-7. Manual Minecraft 1.21.11 tests: private routing, server-chat toggle, slash-command passthrough, offline fallback, long messages, repeated submissions, world changes and no chat leakage to the server.
+1. [x] Database schema migration 2 and tests.
+2. [x] Typed ConversationStore and MemoryStore APIs.
+3. [x] Deterministic ContextBuilder and tests for provenance, scope and budgets; live world context intentionally omitted until freshness checks exist.
+4. [x] Provider interface plus explicit environment configuration and bounded OpenAI-compatible adapter with fake-server tests.
+5. [x] Strict chat request/response schema and authenticated `/bridge/v1/chat` endpoint.
+6. [x] Fabric plain-text private chat routing and local reply rendering.
+7. [ ] Verify manually in Minecraft 1.21.11: private routing/no server leakage, N toggle, slash passthrough, provider-offline fallback, long/repeated messages and world transitions.
 
-Voice and autonomous actions are explicitly deferred until the text dialogue milestone passes.
+Voice and autonomous actions are explicitly deferred until text dialogue is reliable.
