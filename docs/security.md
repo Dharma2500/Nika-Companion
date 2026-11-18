@@ -14,6 +14,8 @@ The repository ignore rules cover common cases, but .gitignore is not a security
 
 The default data directory is ~/NIKA_DATA. Set NIKA_DATA to a dedicated path on the machine that runs the agent. Backups must remain local or in a storage location explicitly chosen by Vitaly.
 
+The CLI rejects empty path variables and checks the data, logs, backups, runtime and database locations before opening SQLite or creating logs. Existing database files must be readable and writable. A database outside NIKA_DATA is supported, but the CLI warns that its logs, runtime state and backups remain in NIKA_DATA.
+
 ## Local logs
 
 Structured application logs are stored as JSON Lines in `NIKA_DATA/logs/`.
