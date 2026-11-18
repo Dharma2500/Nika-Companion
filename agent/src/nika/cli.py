@@ -41,7 +41,10 @@ def run_doctor() -> int:
 
         database.initialize()
         healthy = database.health_check()
-    except (ConfigurationError, OSError, RuntimeError, sqlite3.Error) as error:
+    except ConfigurationError as error:
+        print(f"Nika configuration: ERROR ({error})")
+        return 1
+    except (OSError, RuntimeError, sqlite3.Error) as error:
         LOGGER.exception("doctor.failed")
         print(f"Nika local core: ERROR ({error})")
         return 1
