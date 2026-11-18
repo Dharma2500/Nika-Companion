@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import ctypes
 import hashlib
 import hmac
@@ -734,7 +735,7 @@ def serve(foreground: bool = False) -> None:
                 if not self._dashboard_local_host():
                     self._send(403, {"error": "local_host_required"})
                     return
-                nonce = secrets.token_urlsafe(24)
+                nonce = base64.b64encode(secrets.token_bytes(24)).decode("ascii")
                 body = render_dashboard(nonce)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
