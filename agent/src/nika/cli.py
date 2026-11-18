@@ -10,6 +10,7 @@ from nika.backup import BackupManager
 from nika.config import ConfigurationError, Settings, diagnose_settings
 from nika.database import Database
 from nika.logging_setup import get_logger, setup_logging
+from nika.migration import migrate_data_directory
 from nika.runtime import (
     get_runtime_status,
     runtime_maintenance_lock,
@@ -53,6 +54,7 @@ def run_doctor() -> int:
     print("Nika local core: OK")
     print(f"Data directory: {settings.data_dir}")
     print(f"Database: {settings.database_path}")
+    print(f"Learning data: {settings.learning_path}")
     print(f"Logs: {settings.data_dir / 'logs'} (cli.jsonl and runtime.jsonl)")
     print(f"SQLite integrity: {'OK' if healthy else 'FAILED'}")
     return 0 if healthy else 1
@@ -141,6 +143,35 @@ def run_restore(path: str, confirmed: bool = False) -> int:
     return 0
 
 
+def run_migrate_data(destination: str) -> int:
+    settings, database = _storage()
+    manager = BackupManager(database, settings.data_dir / "backups")
+    try:
+        with runtime_maintenance_lock(settings):
+            backup_path = manager.create_backup()
+            migrated_to = migrate_data_directory(settings, Path(destination))
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        LOGGER.exception("data.migration_failed", extra={"destination": destination})
+        print(f"Data migration: ERROR ({error})")
+        return 1
+
+    LOGGER.info(
+        "data.migration_completed",
+        extra={
+            "source": str(settings.data_dir),
+            "destination": str(migrated_to),
+            "backup_path": str(backup_path),
+        },
+    )
+    print("Data migration: OK")
+    print(f"New data directory: {migrated_to}")
+    print(f"Verified database: {migrated_to / database.path.resolve().relative_to(settings.data_dir.resolve())}")
+    print(f"Pre-migration backup: {backup_path}")
+    print(f"Original data preserved: {settings.data_dir}")
+    print("Runtime state was not copied; it will be recreated at the new location.")
+    return 0
+
+
 def run_start() -> int:
     try:
         result = start_runtime()
@@ -214,6 +245,14 @@ def main() -> None:
         action="store_true",
         help="skip the interactive confirmation prompt",
     )
+    migrate_parser = subparsers.add_parser(
+        "migrate-data",
+        help="safely copy all local data to another directory",
+    )
+    migrate_parser.add_argument(
+        "destination",
+        help="new data directory, for example D:\\NIKA_DATA",
+    )
     subparsers.add_parser("start", help="start the local Nika runtime in the background")
     subparsers.add_parser("foreground", help="run Nika in this console; closing it stops Nika")
     subparsers.add_parser("status", help="show local runtime status")
@@ -250,6 +289,8 @@ def main() -> None:
         raise SystemExit(run_backup_verify(args.path))
     if args.command == "restore":
         raise SystemExit(run_restore(args.path, confirmed=args.yes))
+    if args.command == "migrate-data":
+        raise SystemExit(run_migrate_data(args.destination))
     if args.command in commands:
         raise SystemExit(commands[args.command]())
 
