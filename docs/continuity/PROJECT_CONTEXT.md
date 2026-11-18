@@ -33,19 +33,20 @@ Purpose: this file is the authoritative handoff for continuing Nika-Companion af
 
 - Active branch: `feature/companion-renderer-v0.4.0`
 - Current PR: #1, https://github.com/Dharma2500/Nika-Companion/pull/1
+- Current PR title: `Nika Companion: memory, context and provider foundation (draft)`
 - PR target: `main`
 - PR state: open, draft. Do not merge without approval.
-- Main branch has not been changed by the companion-renderer feature work.
-- Latest known project commit before this continuity update: `1925276a1e6e1fa294d27f62faffe4a6b87ab3b6`
-- Latest delivered mod: v0.4.5.
-- v0.4.5 Fabric workflow: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839400
-- v0.4.5 Python CI: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839669
-- v0.4.5 artifact ID: 14472782965, artifact name `nika-companion-fabric-1.21.11`.
-- v0.4.5 Fabric build and Python CI completed successfully; all checks passed.
-- JAR delivered: `nika-companion-0.4.5.jar` from the Actions artifact.
-- Vitaly manually tested v0.4.5 and confirmed the follow distance now varies and movement feels much better. This is the first positive in-game confirmation of inertial pace variation.
-
-After this context file is committed, fetch the branch head again. Do not assume the above SHA remains the newest commit.
+- Main branch has not been changed by this feature work.
+- Current branch head before this handoff refresh: `b48e8e675155be03eda2e6eaee5bb4261e2fe4e5`.
+- Latest code commit for the provider adapter: `87fec3ecb9fd580b0f96e3c689962d6515a70c2e`.
+- Latest documentation/handoff updates are in commits `daab2825c2c7cf38cd3809850a34173d87bfa4d9`, `4e3d37b2650424e33eca6f1562ac7ddd179e3c86`, `f0e2adac5dc4745596e484f5853326deda768d66`, `4424a43ae44d3cb1edfc537084efd1b2add34a51`, `2829c613340d7cbd38c0559c7a2c7e651c1f7f9c`, and `b48e8e675155be03eda2e6eaee5bb4261e2fe4e5`.
+- Latest Python CI for provider code: run 44409119993, completed successfully across all six Python 3.11/3.12/3.13 Windows/Ubuntu jobs, including Ruff lint and tests.
+- Latest Fabric build for provider code: run 44409120014, completed successfully.
+- Latest CI after documentation/handoff refresh: Python run 44409618003 and Fabric build run 44409617953, both completed successfully. Source overlay job also passed.
+- Latest delivered mod: v0.4.5. Fabric workflow: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839400. Python CI: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839669.
+- v0.4.5 artifact ID: 14472782965, artifact name `nika-companion-fabric-1.21.11`; JAR `nika-companion-0.4.5.jar` was delivered.
+- Vitaly manually tested v0.4.5 and confirmed follow distance varies and movement feels much better.
+- No new JAR was produced for the Nika Intelligence foundation/provider adapter because the Minecraft client source did not change. Never send an older JAR as though it were a new build.
 
 ## 4. Minecraft companion behavior already implemented
 
@@ -84,37 +85,57 @@ Outstanding visual acceptance checks remain: extended camera-turn while idle, di
 
 ## 5. Current Python Core and bridge
 
-Python package:
+Main Python files:
 - `agent/src/nika/database.py`
 - `agent/src/nika/event_store.py`
 - `agent/src/nika/runtime.py`
 - `agent/src/nika/observation.py`
 - `agent/src/nika/config.py`
+- `agent/src/nika/memory.py`
+- `agent/src/nika/context.py`
+- `agent/src/nika/provider.py`
 
-Current persistence:
-- SQLite schema version 1.
-- Tables: `event_log`, `memories`, `skills`, `world_facts`.
-- `EventStore` appends versioned events.
-- `memories` table exists but there is not yet a full typed Memory API.
-- There is no conversation/session/message table yet.
-- There is no ContextBuilder or dialogue pipeline yet.
+### Persistence and typed APIs
 
-Runtime/bridge:
+- SQLite schema version 2.
+- Tables: `event_log`, `memories`, `skills`, `world_facts`, `conversations`, `conversation_messages`.
+- Migration v1 remains intact; migration v2 adds conversation history and memory provenance/scope/tags.
+- Legacy v1 memory records receive cautious provenance `hypothesis`, never automatically `verified` or `user_taught`.
+- `MemoryStore`: add/get/recent/search, confidence/provenance/tags validation, global/world scope, bounded keyword candidates and Python Unicode `casefold()` for Russian case-insensitive matching.
+- `ConversationStore`: create/get conversation, append user/assistant/system messages, recent chronological retrieval, request_id idempotency and bounded metadata/content.
+- User message limit at storage layer: 4,000 characters; assistant/system: 12,000. Metadata: 4 KiB.
+- `ContextBuilder`: deterministic structured context with Nika personality constitution, up to 12 recent turns, up to 6 relevant memories with provenance/confidence, hard 12 KiB UTF-8 package budget. Old history and low-ranked memories are trimmed first.
+- ContextBuilder intentionally returns `world_context: null` until a freshness/scope contract for actual observations exists. Never pretend stale observation is live world state.
+- `BackupManager` accepts supported schema-v1 backups and migrates only a staged temporary copy to schema v2 before atomic restore. The original backup is not modified. Schema 0/future unsupported versions are rejected. The regression test verifies legacy event/memory preservation and cautious provenance.
+
+### Provider adapter
+
+- `agent/src/nika/provider.py`: `ProviderConfig`, `load_provider_config`, `OpenAICompatibleProvider`, `ProviderManager`.
+- Environment: `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, optional `NIKA_LLM_API_KEY`. No endpoint, model or credential is committed or hard-coded.
+- OpenAI-compatible `POST {base_url}/chat/completions` via Python standard library `urllib`; no third-party HTTP dependency.
+- Bounds: HTTP(S) URL validation; timeout 1–120 sec; request 32 KiB; response 64 KiB; assistant reply 12,000 characters; max_tokens 1–4096; temperature 0–2.
+- API key, prompts and provider response bodies are not logged. Provider failures are sanitized.
+- Fake local HTTP-server tests cover config parsing, request body, response parsing, HTTP errors, oversized bodies and missing provider.
+- ProviderManager currently wraps one optional provider. Budgets, failover/rotation and full degraded-mode orchestration are not implemented yet.
+- Important: the actual LM Studio endpoint and model ID on the PC running the Nika runtime have NOT been verified/configured yet. Do not assume localhost/model IDs until checked on that PC.
+
+### Runtime/bridge
+
 - Local HTTP runtime is bound to IPv4 loopback.
 - Bridge protocol v1.
-- HMAC-SHA256 authentication over method, path, timestamp, nonce and SHA-256 request body.
+- HMAC-SHA256 authentication over method, exact path, timestamp, nonce and SHA-256 request body.
 - Timestamp window and nonce/replay protection.
 - Existing routes: signed `GET /bridge/v1/hello` and signed `POST /bridge/v1/observe`.
-- Observation endpoint accepts strict bounded v1/v2/v3 schemas; current maximum observation payload is 8 KiB.
-- Current capabilities are health/read and observation submit.
+- Observation endpoint accepts strict bounded v1/v2/v3 schemas; current max observation payload is 8 KiB.
+- No authenticated chat route exists yet; the provider adapter is not yet wired into runtime.
 - Bridge token is stored locally in `NIKA_DATA/runtime/status.json`, never committed.
-- No authenticated chat endpoint and no LLM provider integration have been implemented yet.
-- Settings currently cover filesystem paths, not model/provider endpoint or credentials.
+- Current `Settings` still covers filesystem paths; provider settings are read separately by `load_provider_config()`.
 
-Observation:
+### Observation boundary
+
 - User-triggered only via `/nika observe`.
 - v3 includes client versions; dimension; bounded loaded-only 5×3×5 block sample (max 32 non-air blocks, 12 properties per block); biome; time-of-day; rain/thunder; local light; game mode; one-shot on-ground/sprint/swim/crouch state.
-- No automatic polling, chat capture, inventory dump, block entities, container contents, hidden server state or other-player data.
+- No automatic polling, received chat capture, inventory dump, block entities, container contents, hidden server state or other-player data.
 - Preserve manual-only observation and strict 8 KiB ceiling until the user explicitly approves a separately scoped feature.
 
 ## 6. New user requirements and product decisions (2026-11-19)
