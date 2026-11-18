@@ -67,7 +67,7 @@ final class BridgeClient {
     }
 
     static CompletableFuture<String> submitObservation(JsonObject observation) {
-        byte[] body = observation.toString().getBytes(StandardCharsets.UTF_8);
+        byte[] body = fitObservationPayload(observation);
         if (body.length == 0 || body.length > MAX_OBSERVATION_BYTES) {
             lastObservationStatus = "rejected (payload size)";
             return CompletableFuture.completedFuture(
@@ -75,6 +75,35 @@ final class BridgeClient {
             );
         }
         return CompletableFuture.supplyAsync(() -> performObservation(body), IO);
+    }
+
+    private static byte[] fitObservationPayload(JsonObject observation) {
+        byte[] body = observation.toString().getBytes(StandardCharsets.UTF_8);
+        if (body.length <= MAX_OBSERVATION_BYTES) {
+            return body;
+        }
+
+        JsonObject world = observation.getAsJsonObject("world");
+        if (world == null) {
+            return body;
+        }
+        JsonObject sample = world.getAsJsonObject("block_sample");
+        if (sample == null) {
+            return body;
+        }
+        JsonArray blocks = sample.getAsJsonArray("blocks");
+        if (blocks == null) {
+            return body;
+        }
+
+        // Drop the farthest sampled blocks first. The payload remains explicit
+        // about the omitted data and never exceeds the transport size limit.
+        while (body.length > MAX_OBSERVATION_BYTES && !blocks.isEmpty()) {
+            blocks.remove(blocks.size() - 1);
+            sample.addProperty("truncated", true);
+            body = observation.toString().getBytes(StandardCharsets.UTF_8);
+        }
+        return body;
     }
 
     private static String performHandshake() {
