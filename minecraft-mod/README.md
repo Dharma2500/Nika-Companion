@@ -5,7 +5,8 @@ The Fabric 1.21.11 client-side component of the Nika-Companion project.
 ## Current milestone
 
 - Client-only Fabric mod entry point
-- Client commands: `/nika status`, `/nika connect`, `/nika observe`
+- Client commands: `/nika status`, `/nika connect`, `/nika observe`, `/nika companion on|off`
+- Client-only vanilla Allay companion prototype with smooth following and local on/off control
 - Reproducible Gradle wrapper build
 - GitHub Actions build artifact
 - Authenticated protocol-v1 read-only handshake via `/nika connect`
@@ -34,7 +35,7 @@ From this directory:
 The remapped mod JAR is written to:
 
 ```
-build/libs/nika-companion-0.3.0.jar
+build/libs/nika-companion-0.4.0.jar
 ```
 
 Copy that JAR and a matching Fabric API build into the `mods` folder of the Fabric 1.21.11 game profile.
@@ -65,4 +66,4 @@ properties per block. V3 additionally reports the biome and environment at the
 player's current loaded position, plus game mode and current movement flags.
 The mod does not read inventory contents, block entities, containers, sign text,
 NBT, chat, server address, account identity, other players or hidden server state.
-No automatic polling or world-changing action is enabled.
+The optional companion is a local render-only Allay instance. It is never added to the client world and is not visible to the server or other players. Use `/nika companion on` and `/nika companion off` to control it. No automatic polling or world-changing action is enabled.
