@@ -148,7 +148,7 @@ transactions; provider calls do not hold SQLite write transactions. When no
 provider is configured, the route returns a truthful error and does not pretend
 that a model response was generated.
 
-Fabric v0.5.0 intercepts ordinary outgoing chat through
+Fabric v0.5.1 intercepts ordinary outgoing chat through
 `ClientSendMessageEvents.ALLOW_CHAT` only while Nika's private chat mode is
 enabled and the local bridge advertises `dialogue.chat`. The message is
 canceled before multiplayer server send, forwarded asynchronously to the
@@ -175,7 +175,7 @@ No component may claim that an unknown task can be solved offline without a matc
 The in-game avatar for Nika uses the vanilla Minecraft entity called
 "Тихоня" (Allay). This supersedes the earlier alt-style avatar concept.
 
-The v0.4.x renderer (current mod v0.5.0) creates a client-side Allay object and submits its
+The v0.4.x renderer (current mod v0.5.1) creates a client-side Allay object and submits its
 vanilla render state through Fabric's world-render event and Minecraft's entity
 render dispatcher. The object is never added to ClientLevel, never synchronized
 with a server, and is not visible to other players. AI and gravity are disabled;
