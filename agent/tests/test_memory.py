@@ -194,3 +194,20 @@ def test_memory_search_matches_cyrillic_case_insensitively(stores) -> None:
 
     matches = memories.search_memories("ВИТАЛИЙ СХЕМЫ")
     assert [item.memory_id for item in matches] == [record.memory_id]
+
+
+def test_get_message_by_request_id_returns_exact_stored_message(stores) -> None:
+    _, conversations = stores
+    conversation = conversations.create_conversation()
+    message = conversations.append_message(
+        conversation.conversation_id,
+        MessageInput(
+            role="user",
+            content="Запрос с повторной отправкой",
+            source="minecraft-client",
+            request_id="request-lookup-001",
+        ),
+    )
+
+    assert conversations.get_message_by_request_id("request-lookup-001") == message
+    assert conversations.get_message_by_request_id("missing-request") is None
