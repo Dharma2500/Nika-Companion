@@ -47,10 +47,13 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Versioned localhost protocol v1 with a read-only handshake
 - [x] Dedicated bridge token, HMAC-SHA256 authentication and nonce replay protection
 - [x] Verify Minecraft `/nika connect` and `/nika status` against the updated Python runtime on Vitaly's Windows machine (authenticated protocol v1 handshake confirmed)
-- [ ] Verify the new manual `/nika observe` command on Vitaly's Windows machine and confirm the observation event is saved in SQLite
+- [x] Verify manual `/nika observe` on Vitaly's Windows machine and confirm the v1 observation event is saved in SQLite
 - [x] Define observation-v1 JSON Schema and strict bounded Python validation (duplicate-key, unknown-field, numeric-range and version checks; automated tests)
 - [x] Implement authenticated `POST /bridge/v1/observe`, strict v1 validation and SQLite event persistence
 - [x] Add explicit `/nika observe` client command (one-shot snapshot only; no automatic polling)
+- [x] Add observation schema v2 with bounded client-visible block-state sampling (5×3×5 region, max 32 blocks, max 12 properties per block)
+- [x] Preserve v1 validation and event compatibility while persisting versioned v1/v2 event types
+- [ ] Verify v2 block-state observation and SQLite persistence on Vitaly's Windows machine
 - [ ] Discover additional client capabilities without reading hidden server state
 - [ ] Client-only companion renderer
 - [ ] Action-request authentication, capability validation and approval gates
