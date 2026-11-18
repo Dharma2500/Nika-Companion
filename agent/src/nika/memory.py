@@ -448,6 +448,19 @@ class ConversationStore:
             metadata=metadata,
         )
 
+    def get_message_by_request_id(
+        self,
+        request_id: str,
+    ) -> ConversationMessage | None:
+        """Return a previously stored message for an idempotency key."""
+        request_id = _require_text(request_id, "request_id", 128)
+        with closing(self.database.connect()) as connection:
+            row = connection.execute(
+                "SELECT * FROM conversation_messages WHERE request_id = ?",
+                (request_id,),
+            ).fetchone()
+        return self._message_from_row(row) if row is not None else None
+
     def get_recent_messages(
         self,
         conversation_id: str,
