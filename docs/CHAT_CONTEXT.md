@@ -261,3 +261,12 @@ This section records the live GitHub re-check performed after the previous ChatG
 4. Configure the real LM Studio endpoint/model locally on the PC running Nika; keep environment values and any key out of Git.
 5. Complete manual Minecraft tests for private chat, no server leakage, N toggle, slash passthrough, offline blocking and world transition.
 6. Do not merge PR #1 until Vitaly explicitly approves and required acceptance checks pass.
+## 12. Documentation consolidation commits (2026-11-19)
+
+The recovery check also corrected conflicting handoff documentation without touching source code:
+- 02ea7b6cbd571a9249df3963f93351a1ac0e83f9 — append recovery state and current CI evidence to this canonical file.
+- 67df949de0d36539cd8587c32c8888fce39e2f27 — replace the obsolete docs/continuity/PROJECT_CONTEXT.md v0.5.0 snapshot with a pointer to this file. This prevents stale fallback-to-public-chat instructions from being followed.
+- 54f616a32685e6c090ef619d6f30a8fe1449afab — append the recovery event to docs/continuity/CHAT_LOG.md.
+- ceeaa7fcc66cc80a2d577fe7311527394dcd7ac9 — add handoff links to README.md.
+- The PR description was updated to list the latest observed code-triggered CI runs 44416364837 and 44416364976. The inspected jobs still have no steps/logs/artifacts. No code changes were made and no new JAR was produced.
+- The current PR head moved due only to documentation updates. The last source-code head remains 69c6ac0d8ea0346ee43b77d2d80d043c70ec37b3; it is still the v0.5.1 code that requires CI and manual acceptance.
