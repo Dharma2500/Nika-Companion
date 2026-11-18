@@ -31,6 +31,7 @@ MAX_USER_MESSAGE_CHARS = 4000
 MAX_SOURCE_CHARS = 128
 MAX_METADATA_BYTES = 4096
 MAX_SEARCH_TERMS = 8
+MAX_SEARCH_CANDIDATES = 512
 MAX_SEARCH_LIMIT = 100
 MAX_RECENT_MESSAGE_LIMIT = 100
 
@@ -245,37 +246,34 @@ class MemoryStore:
         if not terms:
             return []
 
-        clauses = " OR ".join(
-            "(instr(lower(content), ?) > 0 OR instr(lower(tags_json), ?) > 0)"
-            for _ in terms
-        )
         parameters: list[object] = []
         if world_id is None:
             scope_clause = "scope = 'global'"
         else:
             scope_clause = "(scope = 'global' OR (scope = 'world' AND world_id = ?))"
             parameters.append(world_id)
-        for term in terms:
-            parameters.extend((term, term))
 
+        # SQLite's built-in lower() is not Unicode-aware for Cyrillic. Fetch a
+        # bounded candidate set and rank with Python casefold() instead.
         with closing(self.database.connect()) as connection:
             rows = connection.execute(
                 f"""
                 SELECT * FROM memories
-                WHERE {scope_clause} AND ({clauses})
+                WHERE {scope_clause}
                 ORDER BY confidence DESC, updated_at DESC
                 LIMIT ?
                 """,
-                (*parameters, min(limit * 8, MAX_SEARCH_LIMIT)),
+                (*parameters, MAX_SEARCH_CANDIDATES),
             ).fetchall()
 
-        candidates = [self._record_from_row(row) for row in rows]
         scored = []
-        for record in candidates:
+        for row in rows:
+            record = self._record_from_row(row)
             searchable = f"{record.content} {' '.join(record.tags)}".casefold()
             hits = sum(term in searchable for term in terms)
-            score = hits / len(terms)
-            scored.append((score, record.confidence, record.updated_at, record))
+            if hits:
+                score = hits / len(terms)
+                scored.append((score, record.confidence, record.updated_at, record))
         scored.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
         return [item[3] for item in scored[:limit]]
 
