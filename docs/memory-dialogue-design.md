@@ -65,7 +65,7 @@ Extend the existing `memories` table without deleting or rewriting current recor
 - optional `world_id`
 - bounded `tags_json`
 
-Keep the existing `source` and `confidence` fields. Existing rows migrate to `user_taught` / `global` defaults only as a compatibility placeholder; they must not be presented as verified facts.
+Keep the existing `source` and `confidence` fields. Existing rows migrate to `user_taught` / `global` defaults only as a the cautious `hypothesis` default; they must not be presented as user-taught or verified facts.
 
 ## Memory API
 
