@@ -128,7 +128,7 @@ Version fields to keep in sync:
 - PR #1 draft: `Nika Companion v0.5.1: private plain-text chat and intelligence foundation`, base `main`.
 - Do not merge automatically. Keep all development on the feature branch.
 - Current intended mod release after fail-closed privacy fix: **v0.5.1**.
-- Current branch head (at latest handoff refresh): `a9cfd32c71e6e8f9567efe06280d3ee323d12b41`.
+- Current branch head before this handoff refresh: `578f3105f267c2f899ea2438d286869f1c197fe6` (`Normalize Python runtime test spacing`, 2026-11-18).
 - v0.5.1 code and version fields are in sync: `MOD_VERSION=0.5.1`, `gradle.properties mod_version=0.5.1`, Fabric artifact path `nika-companion-0.5.1.jar`.
 - Fail-closed private chat is implemented in `NikaChatClient.java`: when bridge/provider is unavailable, ordinary message returns `false` and is not sent to the server; local warning instructs Vitaly to press N to switch explicitly to server chat.
 - Added backend test `test_bridge_chat_without_provider_does_not_persist_user_message` in `agent/tests/test_runtime.py`; it expects authenticated `/bridge/v1/chat` to return 503 without persisting the user turn if provider is not configured.
@@ -172,7 +172,7 @@ Visual companion acceptance still required:
 
 ## 8. Next work (priority order)
 
-1. v0.5.1 fail-closed private chat safety patch is implemented. Restore a working GitHub Actions runner allocation for the private repo/account, then get green Fabric + Python checks for the current head before JAR delivery.
+1. v0.5.1 fail-closed private chat safety patch is implemented. Current GitHub Actions failure is confirmed to occur before runner allocation: all actual jobs have `runner_id=0`, empty `runner_name`, `steps=[]`, and no logs. Check account billing/budget and repository Actions policy; if both are clean, escalate with run/job IDs to GitHub Support. Then obtain green Fabric + Python checks for the current head before JAR delivery.
 2. Update PR #1 description and this context file with exact latest commit/run/artifact state.
 3. On Vitaly's PC, configure and verify actual LM Studio URL/model ID using local environment only. Do not ask user to paste API keys.
 4. Manual Minecraft acceptance of private chat and no server leakage, especially provider-offline behavior.
@@ -190,3 +190,25 @@ Never write these to Git or this handoff:
 - local SQLite databases/backups, message content, logs, world snapshots, account/server identity.
 Local environment names only: `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, optional `NIKA_LLM_API_KEY`.
 The local data directory is outside repository; never migrate it or change its schema without a migration/backup plan.
+
+
+## 10. Latest CI runner diagnosis (2026-11-19)
+
+Current state was rechecked against GitHub immediately before this handoff update:
+- PR #1 remains open, draft, base `main`, not merged. PR head and feature branch head both matched `578f3105f267c2f899ea2438d286869f1c197fe6` before this docs-only commit.
+- Latest Fabric run: `44415811997`, run #125, commit `578f3105f267c2f899ea2438d286869f1c197fe6`.
+  - Job `135195682729`, label `ubuntu-24.04`, completed failure at 2026-11-18 22:53:30 UTC.
+  - Raw jobs API: `runner_id=0`, `runner_name=""`, `runner_group_id=0`, `steps=[]`.
+  - No job logs and no artifacts.
+- Latest Python CI run: `44415811971`, run #341, same commit.
+  - Six matrix jobs failed in about 3 seconds with labels `ubuntu-latest` / `windows-latest`.
+  - All six actual jobs report `runner_id=0`, empty runner names, and empty steps. The dependent source-overlay job was skipped because the test matrix failed.
+  - No job logs and no artifacts.
+- Workflow YAML was inspected. Fabric requests a standard GitHub-hosted `ubuntu-24.04` runner; Python CI requests standard GitHub-hosted `ubuntu-latest` and `windows-latest` runners. Both workflows have ordinary triggers and read-only `contents: read` permissions. No custom/self-hosted labels or suspicious workflow command explain an immediate pre-step failure.
+- Therefore this is not a compiler, pytest, Ruff, Gradle, checkout, or source-code failure observed in CI. None of those steps has started. Current v0.5.1 code remains unverified.
+- A highly similar public GitHub Community report dated 2026-11-15 documented private GitHub Free jobs with the exact signature (`runner_id=0`, no steps/logs, 2–5 seconds); that report's owner also showed included Actions compute fully consumed ($12/$12), Actions budget $0, usage blocked, and no payment method. This is only an analogue, not evidence of Vitaly's billing state: https://github.com/orgs/community/discussions/213180
+- Official billing docs: https://docs.github.com/en/actions/concepts/billing-and-usage . Private repository hosted runner costs draw from included compute; the account's settings determine whether further usage is permitted.
+- User must inspect GitHub **Settings → Billing & licensing → Usage / Budgets and alerts**, specifically included compute used vs allowance and whether Actions usage/budget is blocked. Also inspect repository **Settings → Actions → General** to ensure Actions are enabled and standard GitHub-hosted actions/runners are permitted.
+- If billing and repository policies are clean, collect exact failing run URLs/job IDs and open a GitHub Support request. A minimal diagnostic workflow in another repository under the same account can distinguish repository-specific settings from account-level restrictions, but do not create a public repo or expose private source.
+- Do not add a fake code change, switch to a public repository, or deliver v0.5.0 in place of v0.5.1 just to bypass the runner failure. No v0.5.1 JAR artifact exists.
+- Next: wait for Vitaly's result from the billing/policy check; then retry a current-head workflow only after a relevant setting is corrected or support indicates recovery. Do not keep rerunning identical failures without new evidence.
