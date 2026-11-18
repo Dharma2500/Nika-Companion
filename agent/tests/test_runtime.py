@@ -15,6 +15,8 @@ import pytest
 
 from nika import runtime
 from nika.config import Settings
+from nika.database import Database
+from nika.event_store import EventStore
 from nika.runtime import get_runtime_status, start_runtime, stop_runtime
 
 
@@ -304,6 +306,124 @@ def _signed_bridge_request(
         },
         method="GET",
     )
+
+
+def _signed_observation_request(
+    status: dict[str, object],
+    body: bytes,
+    *,
+    timestamp: str | None = None,
+    nonce: str | None = None,
+) -> Request:
+    issued_at = timestamp or str(int(time.time()))
+    request_nonce = nonce or secrets.token_urlsafe(24)
+    signature = runtime.create_bridge_signature(
+        str(status["bridge_token"]),
+        "POST",
+        runtime.BRIDGE_OBSERVE_PATH,
+        issued_at,
+        request_nonce,
+        body,
+    )
+    return Request(
+        f"http://127.0.0.1:{status['port']}{runtime.BRIDGE_OBSERVE_PATH}",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Nika-Bridge-Timestamp": issued_at,
+            "X-Nika-Bridge-Nonce": request_nonce,
+            "X-Nika-Bridge-Signature": signature,
+        },
+        method="POST",
+    )
+
+
+def _sample_observation_payload() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "client": {"minecraft_version": "1.21.11", "mod_version": "0.1.0"},
+        "world": {"dimension": "minecraft:overworld"},
+        "player": {
+            "x": 125.5,
+            "y": 72.0,
+            "z": -4096.25,
+            "health": 18.0,
+            "food_level": 17,
+            "selected_item": "minecraft:diamond_pickaxe",
+        },
+    }
+
+
+def test_bridge_observation_v1_is_authenticated_and_persisted(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status = json.loads(
+            (settings.data_dir / "runtime" / "status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        body = json.dumps(_sample_observation_payload()).encode("utf-8")
+        timestamp = str(int(time.time()))
+        nonce = secrets.token_urlsafe(24)
+        request = _signed_observation_request(
+            status, body, timestamp=timestamp, nonce=nonce
+        )
+        with urlopen(request, timeout=2) as response:
+            acknowledgement = json.loads(response.read().decode("utf-8"))
+            assert response.status == 202
+
+        assert acknowledgement["service"] == "nika"
+        assert acknowledgement["accepted"] is True
+        assert acknowledgement["schema_version"] == 1
+        event_store = EventStore(Database(settings.database_path))
+        event = event_store.get(acknowledgement["event_id"])
+        assert event is not None
+        assert event["event_type"] == "minecraft.observation.v1"
+        assert event["source"] == "minecraft-client"
+        assert json.loads(event["payload_json"]) == _sample_observation_payload()
+
+        replay = _signed_observation_request(
+            status, body, timestamp=timestamp, nonce=nonce
+        )
+        with pytest.raises(HTTPError) as replay_error:
+            urlopen(replay, timeout=2)
+        assert replay_error.value.code == 403
+        assert event_store.count() == 1
+    finally:
+        assert stop_runtime(settings)
+
+
+def test_bridge_observation_rejects_invalid_payload_without_persisting(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status = json.loads(
+            (settings.data_dir / "runtime" / "status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        payload = _sample_observation_payload()
+        payload["unexpected"] = "must be rejected"
+        body = json.dumps(payload).encode("utf-8")
+        request = _signed_observation_request(status, body)
+
+        with pytest.raises(HTTPError) as error:
+            urlopen(request, timeout=2)
+        assert error.value.code == 400
+        assert EventStore(Database(settings.database_path)).count() == 0
+    finally:
+        assert stop_runtime(settings)
 
 
 def test_bridge_v1_handshake_is_authenticated_and_replay_protected(
