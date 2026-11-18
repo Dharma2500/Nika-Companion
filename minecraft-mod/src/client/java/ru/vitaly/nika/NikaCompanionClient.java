@@ -115,7 +115,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
                         JsonObject environment = new JsonObject();
                         String biomeId = client.level.getBiome(playerPosition)
                             .unwrapKey()
-                            .map(key -> key.location().toString())
+                            .map(key -> key.identifier().toString())
                             .orElse("unknown:unknown");
                         environment.addProperty("biome", biomeId);
                         environment.addProperty(
