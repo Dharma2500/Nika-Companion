@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from nika.backup import BackupManager
-from nika.config import Settings
+from nika.config import ConfigurationError, Settings, diagnose_settings
 from nika.database import Database
 from nika.logging_setup import get_logger, setup_logging
 from nika.runtime import (
@@ -28,12 +28,21 @@ def _storage() -> tuple[Settings, Database]:
 
 
 def run_doctor() -> int:
-    settings, database = _storage()
     try:
+        settings = Settings.from_env()
+        database = Database(settings.database_path)
+        findings = diagnose_settings(settings)
+        errors = [item for item in findings if item.severity == "ERROR"]
+        print(f"Nika configuration: {'ERROR' if errors else 'OK'}")
+        for finding in findings:
+            print(f"{finding.severity}: {finding.message}")
+        if errors:
+            return 1
+
         database.initialize()
         healthy = database.health_check()
-    except (OSError, RuntimeError, sqlite3.Error) as error:
-        LOGGER.exception("doctor.failed", extra={"database_path": str(settings.database_path)})
+    except (ConfigurationError, OSError, RuntimeError, sqlite3.Error) as error:
+        LOGGER.exception("doctor.failed")
         print(f"Nika local core: ERROR ({error})")
         return 1
 
@@ -208,7 +217,23 @@ def main() -> None:
     subparsers.add_parser("stop", help="gracefully stop the local Nika runtime")
 
     args = parser.parse_args()
-    setup_logging(filename="cli.jsonl")
+    try:
+        settings = Settings.from_env()
+        findings = diagnose_settings(settings)
+        errors = [item for item in findings if item.severity == "ERROR"]
+        if errors:
+            print("Nika configuration: ERROR")
+            for finding in errors:
+                print(f"ERROR: {finding.message}")
+            raise SystemExit(2)
+        setup_logging(settings, filename="cli.jsonl")
+    except ConfigurationError as error:
+        print(f"Nika configuration: ERROR ({error})")
+        raise SystemExit(2) from error
+    except OSError as error:
+        print(f"Nika logging: ERROR ({error})")
+        raise SystemExit(2) from error
+
     LOGGER.info("cli.command", extra={"command": args.command or "help"})
     commands = {
         "doctor": run_doctor,
