@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nika.local/schemas/minecraft-observation-v2.schema.json",
+  "title": "Nika Minecraft client observation v2",
+  "description": "A manually requested, read-only snapshot with a small loaded-only block sample.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "client", "world", "player"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minecraft_version", "mod_version"],
+      "properties": {
+        "minecraft_version": { "const": "1.21.11" },
+        "mod_version": {
+          "type": "string",
+          "maxLength": 16,
+          "pattern": "^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$"
+        }
+      }
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "block_sample"],
+      "properties": {
+        "dimension": { "$ref": "#/$defs/resourceLocation" },
+        "block_sample": { "$ref": "#/$defs/blockSample" }
+      }
+    },
+    "player": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z", "health", "food_level", "selected_item"],
+      "properties": {
+        "x": { "type": "number", "minimum": -30000000, "maximum": 30000000 },
+        "y": { "type": "number", "minimum": -2048, "maximum": 2048 },
+        "z": { "type": "number", "minimum": -30000000, "maximum": 30000000 },
+        "health": { "type": "number", "minimum": 0, "maximum": 1024 },
+        "food_level": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "selected_item": { "$ref": "#/$defs/resourceLocation" }
+      }
+    }
+  },
+  "$defs": {
+    "resourceLocation": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9_.-]+:[a-z0-9/._-]+$"
+    },
+    "blockSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["center", "range", "scanned_positions", "non_air_blocks", "truncated", "blocks"],
+      "properties": {
+        "center": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "type": "integer", "minimum": -30000000, "maximum": 30000000 },
+            "y": { "type": "integer", "minimum": -2048, "maximum": 2048 },
+            "z": { "type": "integer", "minimum": -30000000, "maximum": 30000000 }
+          }
+        },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "const": 2 },
+            "y": { "const": 1 },
+            "z": { "const": 2 }
+          }
+        },
+        "scanned_positions": { "type": "integer", "minimum": 0, "maximum": 75 },
+        "non_air_blocks": { "type": "integer", "minimum": 0, "maximum": 75 },
+        "truncated": { "type": "boolean" },
+        "blocks": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/block" }
+        }
+      }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dx", "dy", "dz", "id", "properties", "properties_truncated"],
+      "properties": {
+        "dx": { "type": "integer", "minimum": -2, "maximum": 2 },
+        "dy": { "type": "integer", "minimum": -1, "maximum": 1 },
+        "dz": { "type": "integer", "minimum": -2, "maximum": 2 },
+        "id": { "$ref": "#/$defs/resourceLocation" },
+        "properties": {
+          "type": "object",
+          "maxProperties": 12,
+          "propertyNames": { "pattern": "^[a-z0-9_]{1,64}$" },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-z0-9_.-]{1,64}$"
+          }
+        },
+        "properties_truncated": { "type": "boolean" }
+      }
+    }
+  }
+}
