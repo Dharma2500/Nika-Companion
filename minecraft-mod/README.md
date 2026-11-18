@@ -9,7 +9,9 @@ The Fabric 1.21.11 client-side component of the Nika-Companion project.
 - Reproducible Gradle wrapper build
 - GitHub Actions build artifact
 - Authenticated protocol-v1 read-only handshake via `/nika connect`
-- Explicit one-shot observation via `/nika observe` (player status plus a loaded-only 5×3×5 block sample; maximum 32 blocks)
+- Explicit one-shot observation via `/nika observe`
+- Observation v3 includes the v2 loaded-only 5×3×5 block sample (maximum 32 non-air blocks), biome, time-of-day ticks, rain/thunder state, local light level, game mode and one-shot movement flags
+- v1 and v2 payload validation and SQLite event persistence remain supported
 - No automatic polling, chat transfer, inventory dump, block-entity/container contents or world-changing actions
 
 ## Requirements
@@ -32,7 +34,7 @@ From this directory:
 The remapped mod JAR is written to:
 
 ```
-build/libs/nika-companion-0.2.0.jar
+build/libs/nika-companion-0.3.0.jar
 ```
 
 Copy that JAR and a matching Fabric API build into the `mods` folder of the Fabric 1.21.11 game profile.
@@ -54,6 +56,13 @@ Expected status includes:
 The `/nika connect` command checks the Python runtime through the authenticated
 loopback handshake. Start the Python runtime first. The `/nika observe` command
 then sends one signed JSON snapshot to the Python runtime. Python validates it
-against the versioned observation schemas (`observation-v1` and `observation-v2`) and appends it to the local
-SQLite event journal. Observation is user-triggered, bounded to 8 KiB and
-v2 includes up to 32 non-air blocks from a loaded-only 5×3×5 region, with block IDs and up to 12 state properties per block. It does not read block entities, container contents, chat, inventories, server address or other players. The request remains bounded to 8 KiB.
+against the strict versioned observation schemas (`observation-v1`, `observation-v2`
+and `observation-v3`) and appends it to the local SQLite event journal.
+
+All observations are user-triggered and bounded to 8 KiB. The v2/v3 block sample
+covers a loaded-only 5×3×5 region with up to 32 non-air blocks and up to 12 state
+properties per block. V3 additionally reports the biome and environment at the
+player's current loaded position, plus game mode and current movement flags.
+The mod does not read inventory contents, block entities, containers, sign text,
+NBT, chat, server address, account identity, other players or hidden server state.
+No automatic polling or world-changing action is enabled.
