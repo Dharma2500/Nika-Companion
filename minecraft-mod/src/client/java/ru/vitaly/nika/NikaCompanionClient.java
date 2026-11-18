@@ -27,7 +27,7 @@ import java.util.Map;
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
-    private static final String MOD_VERSION = "0.5.0";
+    private static final String MOD_VERSION = "0.5.1";
     private static final int OBSERVATION_SCHEMA_VERSION = 3;
     private static final int BLOCK_SAMPLE_RADIUS_XZ = 2;
     private static final int BLOCK_SAMPLE_RADIUS_Y = 1;
