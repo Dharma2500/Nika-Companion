@@ -212,3 +212,52 @@ Current state was rechecked against GitHub immediately before this handoff updat
 - If billing and repository policies are clean, collect exact failing run URLs/job IDs and open a GitHub Support request. A minimal diagnostic workflow in another repository under the same account can distinguish repository-specific settings from account-level restrictions, but do not create a public repo or expose private source.
 - Do not add a fake code change, switch to a public repository, or deliver v0.5.0 in place of v0.5.1 just to bypass the runner failure. No v0.5.1 JAR artifact exists.
 - Next: wait for Vitaly's result from the billing/policy check; then retry a current-head workflow only after a relevant setting is corrected or support indicates recovery. Do not keep rerunning identical failures without new evidence.
+
+## 11. Recovery after interrupted conversation (2026-11-19)
+
+This section records the live GitHub re-check performed after the previous ChatGPT conversation was interrupted.
+
+### Verified source-control state
+- PR #1 is still **open, draft, not merged**, base main.
+- Active branch remains feature/companion-renderer-v0.4.0.
+- Current PR head: 69c6ac0d8ea0346ee43b77d2d80d043c70ec37b3.
+- PR URL: https://github.com/Dharma2500/Nika-Companion/pull/1
+- The PR description already contains the v0.5.1 fail-closed chat implementation and the current CI diagnosis.
+- No code changes were made during this recovery check.
+
+### Latest CI state at the current PR head
+- Fabric workflow run 44416364837 (run #126): failed before any build step; job 135197604079; the Jobs API returns an empty steps array, logs endpoint returns BlobNotFound, and the run has no artifacts.
+- Python CI run 44416364976 (run #342): all six Python/OS matrix jobs failed before execution; each has an empty steps array; the dependent source-overlay job was skipped. No artifacts were produced.
+- Combined commit statuses endpoint returned no status entries.
+- These results do **not** indicate a Gradle, Java, pytest or Ruff failure: none of those steps ran. Current v0.5.1 remains unverified by CI.
+- No v0.5.1 JAR exists. The successful v0.5.0 artifact is historical and must not be substituted.
+
+### Current code facts rechecked
+- The feature branch contains NikaChatClient.java using Fabric ClientSendMessageEvents.ALLOW_CHAT for outgoing ordinary text. No prefix or /nika ask is required.
+- Slash commands remain on their separate event path.
+- Private mode is enabled when /nika summons Nika; key N explicitly toggles public server chat.
+- v0.5.1 is fail-closed: when the local chat capability is unavailable, ordinary text is canceled locally and a warning tells Vitaly to press N to switch to server chat. No silent fallback to multiplayer chat.
+- BridgeClient uses the local runtime status file and signed loopback HMAC requests. The provider endpoint/model are not hard-coded.
+- Python chat schema enforces canonical UUIDs, strict JSON, max 4,000 characters and 16 KiB body. The runtime's no-provider test expects HTTP 503 without persisting the user turn.
+- Actual LM Studio host/model configuration and manual in-game privacy acceptance are still pending.
+
+### CI blocker and decision
+- The repeated signature is pre-runner failure: failed jobs have no steps and no logs. Repository workflow YAML uses ordinary GitHub-hosted runner labels and read-only contents permissions.
+- Most useful next check is account Settings → Billing & licensing → Usage / Budgets and alerts, then repository Settings → Actions → General. Inspect included Actions compute usage and whether usage/budget is blocked; also confirm Actions and GitHub-hosted runners are permitted.
+- This is a diagnostic hypothesis, **not a confirmed account billing cause**. Do not claim the account has exhausted its quota unless Vitaly verifies it.
+- GitHub documentation: https://docs.github.com/en/actions/concepts/billing-and-usage . It explains that private-repository hosted-runner use draws from included compute and can be blocked when the allowance is exhausted without a valid payment method; self-hosted runners are separately free.
+- If billing and repository policy are clean, escalate these run/job identifiers to GitHub Support: Fabric run 44416364837, job 135197604079; Python run 44416364976, jobs 135197604818, 135197605112, 135197605226, 135197605232, 135197605247, 135197605388.
+- Do not repeatedly rerun unchanged workflows without new evidence. Do not make the private repository public to bypass billing.
+
+### Documentation consistency
+- docs/CHAT_CONTEXT.md is the single canonical full handoff.
+- docs/continuity/PROJECT_CONTEXT.md previously contained an older v0.5.0 snapshot that contradicted the v0.5.1 fail-closed implementation. It is being replaced with a pointer to this canonical file to prevent a future assistant from following stale instructions.
+- docs/continuity/CHAT_LOG.md remains the chronological concise log and must receive a dated entry after substantive project turns.
+
+### Exact next actions
+1. Vitaly checks GitHub account billing/usage/budgets and repository Actions settings. Report only the visible status; do not share payment details or secrets.
+2. Once runner allocation is restored or a safe self-hosted runner is deliberately configured, run current-head Fabric + Python CI.
+3. Only after successful current-head Fabric build, retrieve and verify the v0.5.1 artifact. Never use v0.5.0 as a replacement.
+4. Configure the real LM Studio endpoint/model locally on the PC running Nika; keep environment values and any key out of Git.
+5. Complete manual Minecraft tests for private chat, no server leakage, N toggle, slash passthrough, offline blocking and world transition.
+6. Do not merge PR #1 until Vitaly explicitly approves and required acceptance checks pass.
