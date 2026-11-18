@@ -27,7 +27,7 @@ import java.util.Map;
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
-    private static final String MOD_VERSION = "0.4.0";
+    private static final String MOD_VERSION = "0.4.1";
     private static final int OBSERVATION_SCHEMA_VERSION = 3;
     private static final int BLOCK_SAMPLE_RADIUS_XZ = 2;
     private static final int BLOCK_SAMPLE_RADIUS_Y = 1;
@@ -38,13 +38,16 @@ public final class NikaCompanionClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         CompanionRenderer.initialize();
+        BridgeClient.ensureConnected();
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(
+            client -> BridgeClient.ensureConnected()
+        );
 
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
-            dispatcher.register(ClientCommandManager.literal("nika")
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            var nikaCommand = ClientCommandManager.literal("nika")
                 .executes(context -> {
-                    context.getSource().sendFeedback(
-                        Component.literal("Nika Companion: use /nika status, /nika connect or /nika observe")
-                    );
+                    CompanionRenderer.summon();
+                    context.getSource().sendFeedback(Component.literal("Ника: я рядом."));
                     return 1;
                 })
                 .then(ClientCommandManager.literal("status")
@@ -61,7 +64,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
                                 MINECRAFT_VERSION,
                                 BridgeClient.getLastStatus(),
                                 BridgeClient.getLastObservationStatus(),
-                                CompanionRenderer.isEnabled() ? "enabled" : "disabled"
+                                CompanionRenderer.isEnabled() ? "summoned" : "hidden"
                             );
                         context.getSource().sendFeedback(Component.literal(status));
                         return 1;
@@ -178,8 +181,8 @@ public final class NikaCompanionClient implements ClientModInitializer {
                 .then(ClientCommandManager.literal("companion")
                     .executes(context -> {
                         context.getSource().sendFeedback(Component.literal(
-                            "Nika companion is " + (CompanionRenderer.isEnabled() ? "on" : "off")
-                                + ". Use /nika companion on or /nika companion off."
+                            "Nika is " + (CompanionRenderer.isEnabled() ? "summoned" : "hidden")
+                                + ". Use /nika or /ника to summon, /nika dismiss to hide."
                         ));
                         return 1;
                     })
@@ -199,9 +202,12 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             );
                             return 1;
                         }))
-                )
-            )
-        );
+                );
+
+            dispatcher.register(nikaCommand);
+            dispatcher.register(ClientCommandManager.literal("ника")
+                .redirect(dispatcher.getRoot().getChild("nika")));
+        });
 
         LOGGER.info("Nika Companion {} initialized for Minecraft {}.", MOD_VERSION, MINECRAFT_VERSION);
     }
