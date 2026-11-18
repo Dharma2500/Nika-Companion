@@ -140,6 +140,10 @@ migration but are not duplicated by every database backup.
 
 Never commit API keys, .env files, SQLite databases, chat logs, world snapshots, or backups. The local data directory is intentionally separate from the repository. See docs/security.md.
 
+## Project handoff
+
+The canonical development handoff is maintained in [docs/CHAT_CONTEXT.md](docs/CHAT_CONTEXT.md). It records current implementation state, privacy requirements, CI/artifact status and the exact next steps. The chronological project log is [docs/continuity/CHAT_LOG.md](docs/continuity/CHAT_LOG.md).
+
 ## Development
 
 Read docs/architecture.md before adding cross-component behavior. Record protocol changes and migrations deliberately. A passing CI run is required for a change to be considered verified.
