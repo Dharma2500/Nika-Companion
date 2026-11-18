@@ -110,6 +110,34 @@ The formatter redacts known sensitive field names and recognizable credential
 formats. Logs are diagnostic records only; SQLite remains the source of truth
 for durable events and memory.
 
+## Conversation and memory storage (schema v2)
+
+SQLite schema v2 preserves the original event, memory, skill and world-fact data.
+It adds `conversations` and `conversation_messages` with foreign keys, ordered
+history and optional request IDs for idempotent message submission. Existing
+memory rows receive a cautious `hypothesis` provenance default; new memory
+records can explicitly distinguish `user_taught`, `observed`, `verified`,
+`inferred` and `hypothesis`, and can be scoped globally or to an opaque local
+world ID.
+
+The typed `MemoryStore` and `ConversationStore` own validation and persistence.
+Dialogue code must not issue ad-hoc SQL. Initial keyword retrieval is bounded
+and Unicode-aware; semantic embeddings are a later improvement, not a current
+capability.
+
+The provider-independent `ContextBuilder` assembles the stable Nika
+constitution, recent conversation turns and relevant memories with provenance
+and confidence labels. It enforces a hard UTF-8 byte budget. Until a freshness
+and world-scope contract is implemented, its `world_context` field is null.
+It must never present stale observations as current world state.
+
+There is not yet an LLM provider integration or authenticated chat route. The
+next work is provider configuration and a strict local bridge dialogue endpoint.
+Plain Minecraft text chat routing is designed in
+`docs/memory-dialogue-design.md`: ordinary text is privately routed to Nika
+without a per-message slash command, while a configurable key binding switches
+back to public server chat. Slash commands remain on their separate event path.
+
 ## API degradation
 
 External models are optional reasoning providers, not the storage layer or the agent process itself. The provider manager will later expose explicit modes:
