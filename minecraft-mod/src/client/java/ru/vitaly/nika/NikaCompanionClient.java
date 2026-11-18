@@ -27,7 +27,7 @@ import java.util.Map;
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
-    private static final String MOD_VERSION = "0.4.1";
+    private static final String MOD_VERSION = "0.4.2";
     private static final int OBSERVATION_SCHEMA_VERSION = 3;
     private static final int BLOCK_SAMPLE_RADIUS_XZ = 2;
     private static final int BLOCK_SAMPLE_RADIUS_Y = 1;
@@ -54,14 +54,6 @@ public final class NikaCompanionClient implements ClientModInitializer {
                     .executes(context -> {
                         CompanionRenderer.dismiss();
                         context.getSource().sendFeedback(Component.literal("Ника: я отойду."));
-                        return 1;
-                    }))
-                .then(ClientCommandManager.literal("уйди")
-                    .executes(context -> {
-                        CompanionRenderer.dismiss();
-                        context.getSource().sendFeedback(
-                            Component.literal("Ника: хорошо, позови меня, когда понадоблюсь.")
-                        );
                         return 1;
                     }))
                 .then(ClientCommandManager.literal("status")
@@ -192,35 +184,10 @@ public final class NikaCompanionClient implements ClientModInitializer {
                         );
                         return 1;
                     }))
-                .then(ClientCommandManager.literal("companion")
-                    .executes(context -> {
-                        context.getSource().sendFeedback(Component.literal(
-                            "Nika is " + (CompanionRenderer.isEnabled() ? "summoned" : "hidden")
-                                + ". Use /nika or /ника to summon, /nika dismiss to hide."
-                        ));
-                        return 1;
-                    })
-                    .then(ClientCommandManager.literal("on")
-                        .executes(context -> {
-                            CompanionRenderer.summon();
-                            context.getSource().sendFeedback(
-                                Component.literal("Nika: companion enabled for this client.")
-                            );
-                            return 1;
-                        }))
-                    .then(ClientCommandManager.literal("off")
-                        .executes(context -> {
-                            CompanionRenderer.dismiss();
-                            context.getSource().sendFeedback(
-                                Component.literal("Nika: companion disabled for this client.")
-                            );
-                            return 1;
-                        }))
+
                 );
 
             dispatcher.register(nikaCommand);
-            dispatcher.register(ClientCommandManager.literal("ника")
-                .redirect(dispatcher.getRoot().getChild("nika")));
         });
 
         LOGGER.info("Nika Companion {} initialized for Minecraft {}.", MOD_VERSION, MINECRAFT_VERSION);
