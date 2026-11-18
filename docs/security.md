@@ -74,11 +74,15 @@ The only planned fields are client/mod versions, dimension, player coordinates,
 health, food level and selected item identifier. Chat, inventory contents,
 server address, player identity and other players are excluded.
 
-The schema and validator do not by themselves enable observation. The HTTP
-endpoint and client-side submission remain disabled until their implementation
-and tests are complete. The first live observation is intended to be explicitly
-requested by the user, not continuously collected.
+The signed `POST /bridge/v1/observe` endpoint accepts only UTF-8 JSON
+bodies up to 8 KiB. HMAC verification covers the exact body hash, path, method,
+timestamp and nonce. The runtime rejects replayed nonces, validates the
+observation against the v1 contract, then persists the normalized payload as
+a local `minecraft.observation.v1` event. The client sends a snapshot only
+when the user runs `/nika observe`; it does not poll automatically.
 
-World-changing operations remain disabled until capability checks, user
-approval, an emergency stop and disposable-world regression tests are
-implemented.
+The observation endpoint does not provide any world-changing operation.
+Chat, inventory contents, server address, player identity and other players
+are not included in the payload. World-changing operations remain disabled
+until capability checks, user approval, an emergency stop and disposable-world
+regression tests are implemented.
