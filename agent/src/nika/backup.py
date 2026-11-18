@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import sqlite3
+import tempfile
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -74,6 +78,174 @@ class BackupManager:
             return True
         finally:
             connection.close()
+
+    def restore_backup(self, path: Path) -> Path | None:
+        """Restore a verified backup, retaining a raw pre-restore safety snapshot.
+
+        The caller must hold the runtime maintenance lock so no Nika process can
+        open the database while the files are replaced.
+        """
+        source = Path(path).resolve()
+        database_path = self.database.path.resolve()
+        if source == database_path:
+            raise ValueError("The backup path must differ from the active database path.")
+        if not self.verify_backup(source):
+            raise sqlite3.DatabaseError("The selected backup failed its integrity check.")
+
+        schema_version = self._schema_version(source)
+        if schema_version != SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Restore requires schema {SCHEMA_VERSION}; "
+                f"the selected backup uses schema {schema_version}."
+            )
+
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        sidecars = self._sidecar_paths(database_path)
+        had_original_files = database_path.exists() or any(
+            sidecar.exists() for sidecar in sidecars
+        )
+        safety_dir: Path | None = None
+        temporary_path: Path | None = None
+
+        try:
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{database_path.name}.restore-",
+                suffix=".tmp",
+                dir=database_path.parent,
+            )
+            os.close(descriptor)
+            temporary_path = Path(temporary_name)
+            shutil.copy2(source, temporary_path)
+            if not self.verify_backup(temporary_path):
+                raise sqlite3.DatabaseError(
+                    "The staged restore file failed its integrity check."
+                )
+
+            if had_original_files:
+                safety_dir = self._create_restore_safety_copy(
+                    database_path,
+                    sidecars,
+                )
+
+            # A WAL or journal from the old database must never be replayed against
+            # the restored database. Their bytes remain in the safety snapshot.
+            for sidecar in sidecars:
+                sidecar.unlink(missing_ok=True)
+
+            os.replace(temporary_path, database_path)
+            temporary_path = None
+
+            if not self.verify_backup(database_path):
+                raise sqlite3.DatabaseError(
+                    "The restored database failed its post-install integrity check."
+                )
+
+            return safety_dir
+        except Exception as error:
+            try:
+                if safety_dir is not None:
+                    self._restore_safety_copy(
+                        database_path,
+                        sidecars,
+                        safety_dir,
+                    )
+                elif not had_original_files:
+                    database_path.unlink(missing_ok=True)
+                    for sidecar in sidecars:
+                        sidecar.unlink(missing_ok=True)
+            except Exception as rollback_error:
+                raise RuntimeError(
+                    "Restore failed and automatic rollback also failed. "
+                    f"Preserve the safety snapshot at {safety_dir!s}. "
+                    f"Restore error: {error}; rollback error: {rollback_error}"
+                ) from rollback_error
+            raise
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _sidecar_paths(database_path: Path) -> list[Path]:
+        return [
+            Path(f"{database_path}-wal"),
+            Path(f"{database_path}-shm"),
+            Path(f"{database_path}-journal"),
+        ]
+
+    @staticmethod
+    def _schema_version(path: Path) -> int:
+        connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        try:
+            return int(connection.execute("PRAGMA user_version").fetchone()[0])
+        finally:
+            connection.close()
+
+    def _create_restore_safety_copy(
+        self,
+        database_path: Path,
+        sidecars: list[Path],
+    ) -> Path:
+        """Copy the exact pre-restore database files into a retained local folder."""
+        safety_root = self.backup_dir / "restore-safety"
+        safety_root.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        final_dir = safety_root / f"pre-restore-{timestamp}-{uuid.uuid4().hex[:8]}"
+        temporary_dir = Path(tempfile.mkdtemp(prefix=".pending-", dir=safety_root))
+        copied_files: list[str] = []
+
+        try:
+            for source in [database_path, *sidecars]:
+                if source.is_file():
+                    shutil.copy2(source, temporary_dir / source.name)
+                    copied_files.append(source.name)
+
+            manifest = {
+                "created_at": datetime.now(UTC).isoformat(),
+                "database_path": str(database_path),
+                "files": copied_files,
+                "kind": "raw_pre_restore_safety_copy",
+            }
+            (temporary_dir / "manifest.json").write_text(
+                json.dumps(manifest, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temporary_dir, final_dir)
+            return final_dir
+        except Exception:
+            shutil.rmtree(temporary_dir, ignore_errors=True)
+            raise
+
+    def _restore_safety_copy(
+        self,
+        database_path: Path,
+        sidecars: list[Path],
+        safety_dir: Path,
+    ) -> None:
+        """Put the exact pre-restore files back after a failed database swap."""
+        for sidecar in sidecars:
+            sidecar.unlink(missing_ok=True)
+
+        original_database = safety_dir / database_path.name
+        if original_database.is_file():
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{database_path.name}.rollback-",
+                suffix=".tmp",
+                dir=database_path.parent,
+            )
+            os.close(descriptor)
+            temporary_path = Path(temporary_name)
+            try:
+                shutil.copy2(original_database, temporary_path)
+                os.replace(temporary_path, database_path)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+        else:
+            database_path.unlink(missing_ok=True)
+
+        for sidecar in sidecars:
+            saved_sidecar = safety_dir / sidecar.name
+            if saved_sidecar.is_file():
+                shutil.copy2(saved_sidecar, sidecar)
 
     def list_backups(self) -> list[Path]:
         """Return managed backups newest first."""
