@@ -123,9 +123,10 @@ Protocol versioning, authentication of the local bridge, replay protection, payl
 ### Protocol v1: read-only handshake
 
 The first bridge endpoint is `GET /bridge/v1/hello`, bound to IPv4 loopback only.
-It accepts an empty request and returns only the service identity, protocol version,
-runtime PID/version and the `health.read` capability. It does not read or transmit
-Minecraft world data and exposes no chat, memory, or action endpoint.
+It accepts an empty request and returns service identity, protocol version,
+runtime PID/version and the `health.read` plus `observation.submit` capabilities.
+The handshake itself does not read or transmit Minecraft world data. A separate
+signed observation endpoint accepts only the bounded v1 snapshot described below.
 
 Each runtime start creates a separate random bridge token. The client reads the
 token and ephemeral port from `NIKA_DATA/runtime/status.json`; it never receives
