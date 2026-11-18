@@ -172,19 +172,19 @@ Visual companion acceptance still required:
 
 ## 8. Next work (priority order)
 
-1. **Build the local dashboard first.** Start with a loopback-only status/settings panel backed by the existing Python runtime. Keep the UI same-origin, do not load remote scripts/CDNs, and never return credentials or bridge control tokens to the browser.
-2. **Add safe provider configuration through the dashboard.** Provider URL/model may be stored as non-secret local configuration. API keys must go into an OS-backed credential store, never into Git, browser storage, logs, SQLite chat history or the dashboard's returned state. Show only configured/not configured.
-3. **Verify the local LM Studio connection.** Check the actual host and model ID on the machine running Nika. Do not ask Vitaly to paste tokens into chat.
-4. **Complete manual Minecraft acceptance** for private chat, no server leakage, N toggle, slash passthrough, offline local blocking, repeated messages and world transitions.
+1. **Extend the read-only dashboard** with non-secret provider URL/model settings and a connection test. Keep it loopback-only and same-origin.
+2. **Finish manual dashboard acceptance** on Vitaly's Windows machine: launch, refresh, database status, provider state, browser session expiry and runtime restart.
+3. **Complete manual Minecraft acceptance** for private chat, no server leakage, N toggle, slash passthrough, offline local blocking, repeated messages and world transitions.
+4. **Add API credentials near the end** through an OS-backed local credential store. Never commit them, return them to browser JavaScript, put them in logs, or store them in localStorage.
 5. **Strengthen the dialogue experience:** stable personality constitution, truthful fallback behavior, explicit memory teaching/review and provider budgets/diagnostics/failover.
 6. Add fresh, scoped world observation context only after a freshness/scope contract.
 7. Voice only after text dialogue and memory are reliable.
 8. Skills/planning/permissioned actions much later; no autonomous world-changing behavior until action auth, capability checks, approval gates, emergency stop and disposable-world tests exist.
 
-CI status before the next dashboard work:
-- Fabric v0.5.1 run #130 succeeded and uploaded artifact ID `14481446390`.
-- Python CI run #346 succeeded on all six OS/Python matrix jobs; each job ran 157 tests successfully. The dependent source-overlay job also succeeded.
-- These checks validate the code at source commit `69c6ac0d8ea0346ee43b77d2d80d043c70ec37b3`; later changes on this branch in this recovery segment are documentation-only.
+CI status for the dashboard implementation:
+- Fabric v0.5.1 run #142 succeeded and uploaded artifact ID `14482470879`.
+- Python CI run #358 succeeded on all six OS/Python matrix jobs; each job ran 159 tests successfully. The dependent source-overlay archive also succeeded (artifact ID `14481548796`).
+- The dashboard source is on the feature branch head `0a83e9eabd63b1ab03b6bd2c8ffd9049dbcbbecb`. The next docs-only commits preserve that validated source tree.
 
 ## 9. Secrets and local configuration
 
@@ -320,3 +320,29 @@ The recovery check also corrected conflicting handoff documentation without touc
 - v0.5.1 is now CI-verified, and its JAR exists. This does **not** complete manual Minecraft acceptance.
 - Still required: install the v0.5.1 JAR in Fabric 1.21.11 with matching Fabric API, start the local Python runtime, then test private chat, local-only replies, N toggle, slash passthrough and provider-offline blocking. Never test private routing on a public server with sensitive text until the no-leak behavior has been verified.
 - The next development milestone is the local dashboard. Design/build it as a loopback-only surface; keep secrets outside Git and outside browser persistence.
+
+
+## 14. Local dashboard MVP (2026-11-19)
+
+### User-facing entry point
+- New command: python -m nika.cli dashboard or installed nika dashboard.
+- If the local runtime is not running, the command starts it. It then uses the existing local runtime control token to request a one-time dashboard ticket and opens the browser.
+- The UI is a read-only first milestone. It displays runtime state/uptime, SQLite health/schema/counts, provider configured state and advertised bridge capabilities. It does not display chat contents or secret values.
+
+### Implementation
+- New page: agent/src/nika/dashboard.py, a self-contained HTML/CSS/JS page with no third-party scripts, fonts, images or CDN references.
+- agent/src/nika/runtime.py serves /dashboard/, POST /dashboard/session/create, POST /dashboard/session/exchange and session-protected GET /dashboard/api/status on the existing 127.0.0.1 HTTP server.
+- Bootstrap ticket lifetime: 60 seconds; one-use; stored only in runtime memory; CLI places it in the URL fragment, which the initial HTTP request does not transmit. The page removes the fragment and exchanges it after checking same-origin server-side headers.
+- Cookie: HttpOnly, SameSite=Strict, path /dashboard, one-hour lifetime. Session map is memory-only and is reset when the runtime stops/restarts.
+- Security: strict Host match to 127.0.0.1:port, exact Origin, Sec-Fetch-Site same-origin, 4 KiB exchange body limit, no CORS, nonce-based CSP using a standard-base64 nonce, no remote assets, no localStorage and Cache-Control: no-store.
+- Status JSON is intentionally allowlisted. It returns only runtime uptime/state, database health/schema and aggregate counts, provider configured boolean and advertised capabilities. It excludes API key, provider endpoint, runtime control token, bridge HMAC token and conversation contents.
+- The page is read-only. Provider URL/model settings, connection test, API credential configuration, memory review, chat UI and runtime controls are not implemented yet.
+- API keys are intentionally deferred until near the end of the dashboard phase. When added, they must use OS-backed local credential storage and must never be returned to browser JavaScript or written to Git/logs/browser storage.
+
+### Validation
+- Added a runtime test for dashboard page/CSP, unauthorized API access, authenticated single-use ticket exchange, Origin rejection, cookie properties, redacted status response and replay rejection.
+- Added a CLI test for automatic runtime start and browser launch without printing the one-time ticket.
+- Latest Python CI run #358: all six Python 3.11/3.12/3.13 × Ubuntu/Windows jobs passed; each job ran 159 tests; compileall and Ruff passed. The source overlay artifact also uploaded successfully.
+- Latest Fabric build #142 succeeded and uploaded artifact ID 14482470879. No Minecraft client mod source changed in this dashboard milestone.
+- The automated tests verify HTTP/session behavior but do not replace a manual browser test on Vitaly's Windows PC.
+- The earlier failed lint runs #354 and #356 exposed long inline page lines and an import-order issue. These were corrected; current source commit 0a83e9e... passed the latest CI.
