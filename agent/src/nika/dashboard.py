@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-_NONCE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
+_NONCE_PATTERN = re.compile(r"^[A-Za-z0-9+/]{32}$")
 
 
 def render_dashboard(nonce: str) -> bytes:
