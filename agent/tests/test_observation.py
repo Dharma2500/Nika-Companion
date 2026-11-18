@@ -213,6 +213,17 @@ def test_validate_observation_rejects_invalid_v2_payloads(mutation, message: str
         validate_observation(payload)
 
 
+def test_validate_observation_accepts_payload_size_truncation() -> None:
+    payload = sample_observation_v2()
+    sample = payload["world"]["block_sample"]
+    sample["non_air_blocks"] = 3
+    sample["truncated"] = True
+
+    result = validate_observation(payload)
+    assert result["world"]["block_sample"]["truncated"] is True
+    assert len(result["world"]["block_sample"]["blocks"]) == 2
+
+
 def test_validate_observation_requires_consistent_block_truncation() -> None:
     payload = sample_observation_v2()
     payload["world"]["block_sample"]["non_air_blocks"] = 33
