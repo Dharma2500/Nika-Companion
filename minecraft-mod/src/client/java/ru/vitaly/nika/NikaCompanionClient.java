@@ -70,6 +70,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             Python bridge: %s
                             World observation: manual (/nika observe), last: %s
                             Local companion: %s
+                            Chat routing: %s
                             """.formatted(
                                 MOD_VERSION,
                                 MINECRAFT_VERSION,
