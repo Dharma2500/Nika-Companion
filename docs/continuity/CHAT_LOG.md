@@ -115,3 +115,12 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Fabric build #142 (run 44420882364) passed; v0.5.1 JAR artifact ID 14482470879. No Minecraft Java source changed in this milestone.
 - Corrected CLI status wording to accurately state that the bootstrap ticket is one-time while the active session is stored in an HttpOnly cookie for up to one hour.
 - Manual acceptance on Vitaly's Windows PC remains: run python -m nika.cli dashboard, inspect status, refresh, check browser errors, restart runtime and ensure the old session is rejected. Provider settings and API key management remain deliberately postponed; API keys should be added near the end through OS credential storage.
+
+
+## 2026-11-19: final validation after dashboard docs and CLI wording
+
+- Verified latest feature branch head before this documentation-only update: `a13ad5b78b7d3e2b93a1835d76e83758862cdaa2`; repo visibility public; PR #1 remains open/draft/unmerged.
+- Latest Fabric run #146 (44421335808) succeeded and uploaded artifact ID 14481902637.
+- Latest Python CI run #362 (44421335790) completed all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs successfully. Each job passed all 159 tests; compileall and Ruff passed. Source overlay job completes as part of Python CI.
+- The latest CI run includes the minor CLI output correction explaining that the one-time ticket is exchanged for an HttpOnly one-hour session cookie.
+- README, canonical handoff and chronological chat log refreshed with these latest workflow IDs. No new credentials or secrets have been added.
