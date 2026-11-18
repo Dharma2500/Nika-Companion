@@ -55,3 +55,41 @@ def test_restore_command_stops_runtime_and_restores_database(
     assert len(safety_dirs) == 1
     safety_database = Database(safety_dirs[0] / database.path.name)
     assert _event_ids(safety_database) == ["later-event", "saved-event"]
+
+
+
+def test_doctor_reports_invalid_configuration_before_database_creation(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    data_path = tmp_path / "data-is-a-file"
+    data_path.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setenv("NIKA_DATA", str(data_path))
+    monkeypatch.delenv("NIKA_DATABASE_PATH", raising=False)
+
+    assert cli.run_doctor() == 1
+
+    output = capsys.readouterr().out
+    assert "Nika configuration: ERROR" in output
+    assert "NIKA_DATA" in output
+    assert "Nika local core: OK" not in output
+
+
+def test_doctor_reports_external_database_location_warning(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    data_dir = tmp_path / "nika-data"
+    database_path = tmp_path / "separate" / "nika.sqlite3"
+    monkeypatch.setenv("NIKA_DATA", str(data_dir))
+    monkeypatch.setenv("NIKA_DATABASE_PATH", str(database_path))
+
+    assert cli.run_doctor() == 0
+
+    output = capsys.readouterr().out
+    assert "Nika configuration: OK" in output
+    assert "WARNING:" in output
+    assert "outside NIKA_DATA" in output
+    assert "SQLite integrity: OK" in output
