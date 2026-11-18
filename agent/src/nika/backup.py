@@ -79,13 +79,9 @@ class BackupManager:
         finally:
             connection.close()
 
-    def restore_backup(self, path: Path) -> Path | None:
-        """Restore a verified backup, retaining a raw pre-restore safety snapshot.
-
-        The caller must hold the runtime maintenance lock so no Nika process can
-        open the database while the files are replaced.
-        """
-        source = Path(path).resolve()
+    def validate_restore_source(self, path: Path) -> Path:
+        """Validate a restore source without changing the active database."""
+        source = Path(path).expanduser().resolve()
         database_path = self.database.path.resolve()
         if source == database_path:
             raise ValueError("The backup path must differ from the active database path.")
@@ -98,6 +94,16 @@ class BackupManager:
                 f"Restore requires schema {SCHEMA_VERSION}; "
                 f"the selected backup uses schema {schema_version}."
             )
+        return source
+
+    def restore_backup(self, path: Path) -> Path | None:
+        """Restore a verified backup, retaining a raw pre-restore safety snapshot.
+
+        The caller must hold the runtime maintenance lock so no Nika process can
+        open the database while the files are replaced.
+        """
+        source = self.validate_restore_source(path)
+        database_path = self.database.path.resolve()
 
         database_path.parent.mkdir(parents=True, exist_ok=True)
         sidecars = self._sidecar_paths(database_path)
