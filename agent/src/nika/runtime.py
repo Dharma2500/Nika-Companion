@@ -27,7 +27,7 @@ from nika.config import Settings
 from nika.database import Database
 from nika.event_store import EventStore, NewEvent
 from nika.logging_setup import get_logger, setup_logging
-from nika.context import ContextBuilder
+from nika.context import ContextBuildError, ContextBuilder
 from nika.dialogue import (
     MAX_CHAT_REQUEST_BYTES,
     ChatValidationError,
@@ -88,7 +88,7 @@ def create_bridge_signature(
 
 
 class BridgeAuthenticator:
-    """Authenticate read-only bridge requests and reject timestamp/nonce replays."""
+    """Authenticate bounded bridge requests and reject timestamp/nonce replays."""
 
     def __init__(self, token: str) -> None:
         self._token = token
@@ -793,6 +793,18 @@ def serve(foreground: bool = False) -> None:
                                 if conversation is None:
                                     raise
 
+                        existing_user = conversation_store.get_message_by_request_id(
+                            chat_request.request_id
+                        )
+                        if existing_user is not None and (
+                            existing_user.conversation_id != chat_request.conversation_id
+                            or existing_user.role != "user"
+                            or existing_user.content != chat_request.message
+                            or existing_user.source != "minecraft-client"
+                        ):
+                            self._send(409, {"error": "request_id_conflict"})
+                            return
+
                         assistant_request_id = f"{chat_request.request_id}:assistant"
                         cached_reply = conversation_store.get_message_by_request_id(
                             assistant_request_id
@@ -839,7 +851,7 @@ def serve(foreground: bool = False) -> None:
                             chat_request.message,
                             world_id=conversation.world_id,
                         )
-                    except MemoryValidationError as error:
+                    except (MemoryValidationError, ContextBuildError) as error:
                         self._send(
                             400,
                             {"error": "invalid_conversation", "message": str(error)},
