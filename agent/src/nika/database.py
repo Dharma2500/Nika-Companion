@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATION_1 = (
     """CREATE TABLE event_log (
@@ -51,6 +51,40 @@ _MIGRATION_1 = (
     "CREATE INDEX idx_world_facts_world ON world_facts (world_id, observed_at)",
 )
 
+_MIGRATION_2 = (
+    """ALTER TABLE memories ADD COLUMN provenance_type TEXT NOT NULL
+        DEFAULT 'user_taught'
+        CHECK (provenance_type IN (
+            'user_taught', 'observed', 'verified', 'inferred', 'hypothesis'
+        ))""",
+    """ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'
+        CHECK (scope IN ('global', 'world'))""",
+    "ALTER TABLE memories ADD COLUMN world_id TEXT",
+    "ALTER TABLE memories ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'",
+    "CREATE INDEX idx_memories_scope_world ON memories (scope, world_id)",
+    """CREATE TABLE conversations (
+        conversation_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        title TEXT,
+        world_id TEXT
+    )""",
+    "CREATE INDEX idx_conversations_updated_at ON conversations (updated_at)",
+    """CREATE TABLE conversation_messages (
+        message_id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations (conversation_id)
+            ON DELETE CASCADE,
+        request_id TEXT UNIQUE,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+        content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 12000),
+        created_at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}'
+    )""",
+    """CREATE INDEX idx_conversation_messages_timeline
+        ON conversation_messages (conversation_id, created_at, message_id)""",
+)
+
 
 class Database:
     """Owns the local SQLite database and its schema migrations."""
@@ -92,10 +126,17 @@ class Database:
                     f"Database schema {current_version} is newer than supported "
                     f"schema {SCHEMA_VERSION}; refusing to modify it."
                 )
+
             if current_version < 1:
                 for statement in _MIGRATION_1:
                     connection.execute(statement)
                 connection.execute("PRAGMA user_version = 1")
+                current_version = 1
+
+            if current_version < 2:
+                for statement in _MIGRATION_2:
+                    connection.execute(statement)
+                connection.execute("PRAGMA user_version = 2")
 
     def health_check(self) -> bool:
         """Return whether SQLite can execute a basic integrity query."""
