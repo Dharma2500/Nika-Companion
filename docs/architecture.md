@@ -57,6 +57,13 @@ Capability checks -> World Observer
 
 The event journal is written locally before optional model analysis. Raw high-volume block updates must be aggregated locally; they must not become one API request per event.
 
+### Minecraft observation v2
+
+A user-triggered `/nika observe` request reads only a compact region around the local player: 5×3×5 positions, limited to already loaded client chunks. The sample records up to 32 non-air blocks, each with its namespaced block ID and at most 12 state properties. The payload also reports the scan count and whether block entries were truncated. The request remains capped at 8 KiB.
+
+The observer reads `BlockState` only. It does not inspect block entities, container inventories, sign text, NBT, chat, other players or hidden server state. There is no automatic polling. The Python validator accepts both observation schema v1 and v2; each event is persisted with its corresponding versioned event type. Future continuous observation must aggregate and deduplicate changes locally before persistence or model context assembly.
+
+
 ## Memory provenance
 
 Every durable knowledge record identifies its origin, timestamp, world/session where relevant, and confidence. Distinguish at minimum:
