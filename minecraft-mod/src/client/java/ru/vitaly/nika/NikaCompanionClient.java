@@ -183,9 +183,7 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             })
                         );
                         return 1;
-                    }))
-
-                );
+                    }));
 
             dispatcher.register(nikaCommand);
         });
