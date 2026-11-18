@@ -48,7 +48,9 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Dedicated bridge token, HMAC-SHA256 authentication and nonce replay protection
 - [x] Verify Minecraft `/nika connect` and `/nika status` against the updated Python runtime on Vitaly's Windows machine (authenticated protocol v1 handshake confirmed; world observation remains disabled)
 - [x] Define observation-v1 JSON Schema and strict bounded Python validation (duplicate-key, unknown-field, numeric-range and version checks; automated tests)
-- [ ] Discover client capabilities and implement bounded read-only observation (no world-changing actions)
+- [x] Implement authenticated `POST /bridge/v1/observe`, strict v1 validation and SQLite event persistence
+- [x] Add explicit `/nika observe` client command (one-shot snapshot only; no automatic polling)
+- [ ] Discover additional client capabilities without reading hidden server state
 - [ ] Client-only companion renderer
 - [ ] Action-request authentication, capability validation and approval gates
 
