@@ -101,3 +101,17 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Corrected stale project docs: README no longer calls the public repository itself private and now reports current CI/artifact status; roadmap now correctly says offline private messages are blocked locally, never silently forwarded to public server chat. Dashboard roadmap now records loopback-only UI, status, provider settings and OS-backed credential storage.
 - Canonical handoff updated with current public visibility, CI/artifact evidence, honest secret-audit limitations, remaining manual Minecraft acceptance and dashboard as the next milestone.
 - No source-code changes in this recovery turn. No token/API key has been added to Git.
+
+
+## 2026-11-19: read-only local dashboard MVP
+
+- Added agent/src/nika/dashboard.py: responsive local status page, self-contained HTML/CSS/JS, no external scripts/CDNs.
+- Added nika dashboard / python -m nika.cli dashboard. It starts the runtime when needed and opens a browser session via one-time ticket.
+- Added runtime routes on the existing 127.0.0.1 server: /dashboard/, /dashboard/session/create, /dashboard/session/exchange, /dashboard/api/status.
+- Security design: 60-second single-use in-memory ticket, URL fragment not query, immediate fragment removal, exact Host/Origin/Sec-Fetch-Site checks, one-hour HttpOnly; SameSite=Strict cookie, in-memory session, standard-base64 CSP nonce, strict CSP, no CORS, no remote resources, no localStorage, no secret-bearing status fields.
+- The page only shows runtime uptime/state, SQLite health/schema/counts, provider configured boolean and advertised capabilities. It is read-only; no provider editor or credential entry yet.
+- Added tests for dashboard authentication, Origin rejection, one-time ticket replay prevention, cookie flags, status redaction and CLI browser launch.
+- Latest code commit validated: 0a83e9eabd63b1ab03b6bd2c8ffd9049dbcbbecb. Python CI #358 (run 44420882249) passed all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs; each ran 159 tests. Ruff and compileall passed. Source overlay artifact ID 14481548796.
+- Fabric build #142 (run 44420882364) passed; v0.5.1 JAR artifact ID 14482470879. No Minecraft Java source changed in this milestone.
+- Corrected CLI status wording to accurately state that the bootstrap ticket is one-time while the active session is stored in an HttpOnly cookie for up to one hour.
+- Manual acceptance on Vitaly's Windows PC remains: run python -m nika.cli dashboard, inspect status, refresh, check browser errors, restart runtime and ensure the old session is rejected. Provider settings and API key management remain deliberately postponed; API keys should be added near the end through OS credential storage.
