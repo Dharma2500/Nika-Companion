@@ -49,3 +49,18 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - CI for code commit `87fec3ecb9fd580b0f96e3c689962d6515a70c2e`: Python CI 44409119993 successful across Python 3.11/3.12/3.13 on Ubuntu and Windows; lint/tests/source overlay successful. Fabric build 44409120014 successful.
 - No new JAR was built or sent because Fabric client code did not change.
 - Real LM Studio connection is not yet tested. Next: verify actual host and model ID on the PC running Nika, then configure local environment variables, implement authenticated `POST /bridge/v1/chat`, and finally route ordinary unprefixed Minecraft chat privately to Nika with a keybind back to public server chat. Slash commands must remain untouched.
+
+## 2026-11-19: Nika Companion v0.5.0 private plain-text chat
+
+- Added strict private chat request schema v1 in `agent/src/nika/dialogue.py`: canonical UUIDs, duplicate/unknown field rejection, UTF-8 checks, max user text 4,000 chars, max request body 16 KiB.
+- Added authenticated Python `POST /bridge/v1/chat` using the existing bridge HMAC-SHA256, timestamp and nonce/replay protection.
+- Runtime now wires ConversationStore, ContextBuilder and ProviderManager. It persists the user message first, calls the provider outside SQLite write transactions, persists the assistant answer, then returns it.
+- Chat request IDs are idempotent: same request ID/content returns the stored assistant response without a second provider call; same ID with changed content returns HTTP 409. Provider-unconfigured requests return HTTP 503 before user-message persistence. Chat bodies are not written to runtime logs.
+- Hello advertises `dialogue.chat` only when explicit provider config is valid at runtime start.
+- Added Fabric `NikaChatClient.java`: standard unprefixed outgoing chat is privately routed only while Nika is summoned/private mode active AND the bridge advertises `dialogue.chat`. It is cancelled before server send, sent async over signed localhost bridge, and reply is rendered locally.
+- /nika summon activates private mode; /nika dismiss disables it. Configurable key binding N (default) toggles private Nika chat vs normal server chat. Slash commands remain untouched. Presses while a screen/chat input is open are discarded so a typed N does not toggle unexpectedly.
+- If provider/bridge is unavailable before sending, ordinary chat falls back to public server chat with a local warning. If a request fails after interception, the local message says the text was not sent to the server.
+- Added ru_ru/en_us translations and updated Fabric/root README. MOD_VERSION and Gradle mod_version both set to 0.5.0.
+- Fabric build 44413370724 passed; Python CI 44413370413 passed all six Python 3.11/3.12/3.13 Windows/Ubuntu jobs plus source overlay.
+- Artifact ID 14478771154. Delivered JAR nika-companion-0.5.0.jar, SHA-256 `8fcc2912fa894cbeb8c85b49d81e57067191860331f6c8fc901ad3cb0707ef62`. Verified Fabric metadata version and NikaChatClient/BridgeClient classes.
+- Actual LM Studio endpoint/model remains unconfigured/unverified on the PC running Nika. In-game privacy/keybind/slash/fallback acceptance remains untested. Next: verify local /v1/models, configure NIKA_LLM_BASE_URL/NIKA_LLM_MODEL (and optional key) locally, test end-to-end private chat with a trusted server.
