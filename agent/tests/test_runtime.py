@@ -678,3 +678,124 @@ def test_bridge_rejects_bad_signatures_and_expired_timestamps(
     finally:
         assert stop_runtime(settings)
 
+
+
+
+def test_dashboard_uses_single_use_ticket_and_redacted_local_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("NIKA_LLM_BASE_URL", "NIKA_LLM_MODEL", "NIKA_LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status = json.loads(
+            (settings.data_dir / "runtime" / "status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        base_url = f"http://127.0.0.1:{status['port']}"
+        dashboard_url = f"{base_url}/dashboard/"
+
+        page_request = Request(dashboard_url)
+        with urlopen(page_request, timeout=2) as response:
+            page = response.read().decode("utf-8")
+            policy = response.headers["Content-Security-Policy"]
+            assert response.status == 200
+            assert "Ника" in page
+            assert "nonce-" in policy
+            assert "frame-ancestors 'none'" in policy
+            assert "https://" not in page
+
+        unauthenticated = Request(f"{base_url}/dashboard/api/status")
+        with pytest.raises(HTTPError) as unauthorized:
+            urlopen(unauthenticated, timeout=2)
+        assert unauthorized.value.code == 401
+
+        ticket_request = Request(
+            f"{base_url}/dashboard/session/create",
+            data=b"",
+            headers={"X-Nika-Token": status["token"]},
+            method="POST",
+        )
+        with urlopen(ticket_request, timeout=2) as response:
+            ticket_payload = json.loads(response.read().decode("utf-8"))
+            assert response.status == 201
+        ticket = ticket_payload["ticket"]
+        assert ticket_payload["expires_in"] == 60
+
+        exchange_body = json.dumps({"ticket": ticket}).encode("utf-8")
+        wrong_origin = Request(
+            f"{base_url}/dashboard/session/exchange",
+            data=exchange_body,
+            headers={
+                "Content-Type": "application/json",
+                "Origin": "https://example.invalid",
+            },
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as csrf_error:
+            urlopen(wrong_origin, timeout=2)
+        assert csrf_error.value.code == 403
+
+        exchange = Request(
+            f"{base_url}/dashboard/session/exchange",
+            data=exchange_body,
+            headers={
+                "Content-Type": "application/json",
+                "Origin": base_url,
+            },
+            method="POST",
+        )
+        with urlopen(exchange, timeout=2) as response:
+            exchange_payload = json.loads(response.read().decode("utf-8"))
+            cookie_header = response.headers["Set-Cookie"]
+            assert response.status == 200
+            assert exchange_payload == {"authenticated": True}
+            assert "HttpOnly" in cookie_header
+            assert "SameSite=Strict" in cookie_header
+        cookie = cookie_header.split(";", 1)[0]
+
+        status_request = Request(
+            f"{base_url}/dashboard/api/status",
+            headers={"Cookie": cookie},
+        )
+        with urlopen(status_request, timeout=2) as response:
+            dashboard_status = json.loads(response.read().decode("utf-8"))
+            assert response.status == 200
+
+        assert dashboard_status["runtime"] == "running"
+        assert dashboard_status["database"] == {
+            "healthy": True,
+            "schema_version": 2,
+        }
+        assert dashboard_status["provider"] == {"configured": False}
+        assert dashboard_status["counts"] == {
+            "events": 0,
+            "memories": 0,
+            "conversations": 0,
+            "messages": 0,
+        }
+        assert "token" not in dashboard_status
+        assert "bridge_token" not in dashboard_status
+        assert "api_key" not in dashboard_status
+
+        replay = Request(
+            f"{base_url}/dashboard/session/exchange",
+            data=exchange_body,
+            headers={
+                "Content-Type": "application/json",
+                "Origin": base_url,
+            },
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as replay_error:
+            urlopen(replay, timeout=2)
+        assert replay_error.value.code == 403
+    finally:
+        assert stop_runtime(settings)
