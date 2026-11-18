@@ -46,7 +46,8 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Fabric 1.21.11 client mod skeleton and reproducible JAR build (CI verified on JDK 21)
 - [x] Versioned localhost protocol v1 with a read-only handshake
 - [x] Dedicated bridge token, HMAC-SHA256 authentication and nonce replay protection
-- [x] Verify Minecraft `/nika connect` and `/nika status` against the updated Python runtime on Vitaly's Windows machine (authenticated protocol v1 handshake confirmed; world observation remains disabled)
+- [x] Verify Minecraft `/nika connect` and `/nika status` against the updated Python runtime on Vitaly's Windows machine (authenticated protocol v1 handshake confirmed)
+- [ ] Verify the new manual `/nika observe` command on Vitaly's Windows machine and confirm the observation event is saved in SQLite
 - [x] Define observation-v1 JSON Schema and strict bounded Python validation (duplicate-key, unknown-field, numeric-range and version checks; automated tests)
 - [x] Implement authenticated `POST /bridge/v1/observe`, strict v1 validation and SQLite event persistence
 - [x] Add explicit `/nika observe` client command (one-shot snapshot only; no automatic polling)
