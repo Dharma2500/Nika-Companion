@@ -29,6 +29,20 @@ messages. Treat logs as private local data and never commit or upload them.
 
 A stale runtime status file is not sufficient evidence that the process is still alive. Startup verifies both the authenticated control endpoint and the recorded PID. If the PID is still alive but the endpoint is unresponsive, startup fails closed rather than launching a second process. Invalid status files are preserved for inspection. Startup exclusion uses an OS-level file lock held until the control endpoint is ready; the operating system releases it automatically if the starting process crashes. The lock file itself is a persistent coordination file, not evidence that a runtime is active.
 
+## Database restore
+
+Restore accepts only a readable SQLite file that passes `PRAGMA integrity_check`
+and matches the currently supported schema version. Before replacing the live
+database, the CLI reserves the runtime startup lock and requests graceful
+shutdown. Ambiguous status files and live but unresponsive Runtime processes
+cause a fail-closed refusal.
+
+The current database and any `-wal`, `-shm` or `-journal` sidecars are copied
+to `NIKA_DATA/backups/restore-safety/`. The selected backup is staged in the
+database directory and checked before atomic replacement. A failed post-install
+check triggers rollback from the safety copy. Safety snapshots are retained
+separately from normal backup rotation and should be treated as private data.
+
 ## API credentials
 
 Runtime API credentials will be loaded from a local secret store or environment variables in a later implementation. They must never be placed in the Fabric JAR, source files, dashboard frontend, Git history, logs or model prompts.
