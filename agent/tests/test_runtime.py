@@ -369,6 +369,14 @@ def test_bridge_rejects_bad_signatures_and_expired_timestamps(
         with pytest.raises(HTTPError) as expired_error:
             urlopen(expired, timeout=2)
         assert expired_error.value.code == 403
+
+        oversized_timestamp = _signed_bridge_request(
+            status,
+            timestamp="9" * 100,
+        )
+        with pytest.raises(HTTPError) as oversized_error:
+            urlopen(oversized_timestamp, timeout=2)
+        assert oversized_error.value.code == 403
     finally:
         assert stop_runtime(settings)
 

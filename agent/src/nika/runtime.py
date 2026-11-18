@@ -79,7 +79,7 @@ class BridgeAuthenticator:
             return False
         if len(body) > BRIDGE_MAX_REQUEST_BYTES:
             return False
-        if not timestamp.isascii() or not timestamp.isdecimal():
+        if not timestamp.isascii() or not timestamp.isdecimal() or len(timestamp) > 12:
             return False
         if not 16 <= len(nonce) <= 128 or not nonce.isascii():
             return False
@@ -624,6 +624,9 @@ def serve(foreground: bool = False) -> None:
             raw_length = self.headers.get("Content-Length", "0")
             if not raw_length.isascii() or not raw_length.isdecimal():
                 self._send(400, {"error": "invalid_content_length"})
+                return
+            if len(raw_length) > 10:
+                self._send(413, {"error": "request_too_large"})
                 return
             content_length = int(raw_length)
             if content_length > BRIDGE_MAX_REQUEST_BYTES:
