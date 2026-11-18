@@ -272,11 +272,21 @@ def _validate_block_sample(value: Any) -> dict[str, Any]:
         )
 
     expected_entries = min(non_air, MAX_BLOCK_SAMPLE_BLOCKS)
-    if len(normalized_blocks) != expected_entries or truncated != (
-        non_air > MAX_BLOCK_SAMPLE_BLOCKS
-    ):
+    if len(normalized_blocks) > expected_entries:
         raise ObservationValidationError(
-            "block_sample block count and truncation flag are inconsistent."
+            "block_sample contains more entries than the observed non-air block count."
+        )
+    if len(normalized_blocks) < expected_entries and not truncated:
+        raise ObservationValidationError(
+            "block_sample omitted block entries without setting the truncation flag."
+        )
+    if non_air > MAX_BLOCK_SAMPLE_BLOCKS and not truncated:
+        raise ObservationValidationError(
+            "block_sample must be marked truncated when more than 32 non-air blocks exist."
+        )
+    if non_air <= MAX_BLOCK_SAMPLE_BLOCKS and len(normalized_blocks) == non_air and truncated:
+        raise ObservationValidationError(
+            "block_sample is marked truncated even though all non-air blocks are present."
         )
 
     return {
