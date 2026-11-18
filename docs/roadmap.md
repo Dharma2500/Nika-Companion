@@ -53,8 +53,9 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Add explicit `/nika observe` client command (one-shot snapshot only; no automatic polling)
 - [x] Add observation schema v2 with bounded client-visible block-state sampling (5×3×5 region, max 32 blocks, max 12 properties per block)
 - [x] Preserve v1 validation and event compatibility while persisting versioned v1/v2 event types
-- [ ] Verify v2 block-state observation and SQLite persistence on Vitaly's Windows machine
-- [ ] Discover additional client capabilities without reading hidden server state
+- [x] Verify v2 block-state observation and SQLite persistence on Vitaly's Windows machine
+- [ ] Define a client capability inventory and verify each candidate field against the actual client API
+- [ ] Add only approved, useful client-visible observation fields with explicit schema and privacy limits
 - [ ] Client-only companion renderer
 - [ ] Action-request authentication, capability validation and approval gates
 
