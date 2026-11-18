@@ -270,3 +270,15 @@ The recovery check also corrected conflicting handoff documentation without touc
 - ceeaa7fcc66cc80a2d577fe7311527394dcd7ac9 — add handoff links to README.md.
 - The PR description was updated to list the latest observed code-triggered CI runs 44416364837 and 44416364976. The inspected jobs still have no steps/logs/artifacts. No code changes were made and no new JAR was produced.
 - The current PR head moved due only to documentation updates. The last source-code head remains 69c6ac0d8ea0346ee43b77d2d80d043c70ec37b3; it is still the v0.5.1 code that requires CI and manual acceptance.
+
+## 2026-11-19: repository visibility decision
+
+- Latest verified repository visibility is still **private**. Do not describe it as public until GitHub metadata confirms the change.
+- Vitaly has decided to make the repository public to restore reliable GitHub-hosted CI without exposing runtime credentials. He intends to keep API tokens and machine-specific configuration local and add them only during later local setup.
+- Preflight inspection of the current development branch found: `.gitignore` excludes `.env`, `.env.*`, `NIKA_DATA`, SQLite files, JSONL logs, keys and certificates; the checked provider configuration reads secrets from local environment only; the security document forbids committing credentials and local data.
+- Both current workflow files declare `permissions: contents: read`; they use standard GitHub-hosted runners and `pull_request`, not `pull_request_target`. No self-hosted runner is configured in these workflows.
+- This was a targeted working-tree inspection, **not a complete secret audit of every historical commit, branch or past Actions log**. All of those may become publicly visible after the visibility change. Review old workflow logs and historical content before/after publishing; rotate any credential found in history because deleting a file later does not make an exposed credential safe.
+- GitHub public-repository standard hosted runners are free for the current workflow labels (`ubuntu-24.04`, `ubuntu-latest`, `windows-latest`). Public visibility also makes source, branches, PRs, Actions history/logs and activity public and allows forks.
+- Vitaly will perform the visibility switch manually in GitHub: repository Settings → General → Danger Zone → Change repository visibility → Public, confirm the repository name and acknowledge the effects. Re-check repository metadata before proceeding with post-publication CI.
+- Current draft PR #1 remains open and unmerged. Do not merge it without explicit approval.
+- Next: verify visibility changed; inspect/enable secret-scanning push protection and review Actions logs; rerun CI only after the visibility/runner status has changed; then resume Nika implementation on the existing feature branch.
