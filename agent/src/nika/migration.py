@@ -6,6 +6,7 @@ import json
 import shutil
 import sqlite3
 import uuid
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -85,7 +86,7 @@ def migrate_data_directory(settings: Settings, destination: Path) -> Path:
 
         staged_database = staging / database_relative
         staged_database.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(source_database, timeout=10.0) as source_connection:
+        with closing(sqlite3.connect(source_database, timeout=10.0)) as source_connection:
             source_integrity = source_connection.execute("PRAGMA integrity_check").fetchone()
             source_schema = int(source_connection.execute("PRAGMA user_version").fetchone()[0])
             if source_integrity is None or source_integrity[0] != "ok":
@@ -95,7 +96,9 @@ def migrate_data_directory(settings: Settings, destination: Path) -> Path:
                     f"Source database schema {source_schema} does not match "
                     f"supported schema {SCHEMA_VERSION}."
                 )
-            with sqlite3.connect(staged_database, timeout=10.0) as target_connection:
+            with closing(
+                sqlite3.connect(staged_database, timeout=10.0)
+            ) as target_connection:
                 source_connection.backup(target_connection)
                 target_integrity = target_connection.execute(
                     "PRAGMA integrity_check"
