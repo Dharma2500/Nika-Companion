@@ -58,7 +58,7 @@ The mod must not bypass anti-cheat, access hidden server data, impersonate other
 ## Local bridge
 
 The current protocol-v1 endpoint is read-only: an empty signed `GET /bridge/v1/hello`
-returns runtime identity and the `health.read` capability only. It binds to
+returns runtime identity and the `health.read` and `observation.submit` capabilities. It binds to
 `127.0.0.1`; no public network listener is created. A dedicated random bridge
 token is generated per runtime start and kept separate from the runtime
 start/stop control token. HMAC-SHA256 signatures include the method, exact path,
