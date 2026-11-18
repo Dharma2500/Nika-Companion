@@ -114,3 +114,32 @@ def test_cli_rejects_invalid_configuration_before_creating_logs(
     assert error.value.code == 2
     assert "Nika configuration: ERROR" in capsys.readouterr().out
     assert not (tmp_path / "data-is-a-file" / "logs").exists()
+
+
+
+def test_migrate_data_command_stops_runtime_and_preserves_source(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "source-data"
+    settings = Settings(data_dir=source_dir, database_path=source_dir / "nika.sqlite3")
+    database = Database(settings.database_path)
+    database.initialize()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("migration-event", "2026-01-01T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+
+    monkeypatch.setattr(cli, "_storage", lambda: (settings, database))
+    assert start_runtime(settings) == "started"
+
+    destination = tmp_path / "new-drive" / "NIKA_DATA"
+    assert cli.run_migrate_data(str(destination)) == 0
+
+    assert get_runtime_status(settings) is None
+    assert _event_ids(database) == ["migration-event"]
+    assert _event_ids(Database(destination / "nika.sqlite3")) == ["migration-event"]
+    assert (destination / "backups").is_dir()
+    assert (destination / "learning").is_dir()
+    assert (destination / "migration-manifest.json").is_file()
