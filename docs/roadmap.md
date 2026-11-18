@@ -60,7 +60,10 @@ Work proceeds by verified milestones. A milestone is not complete until its test
   - [x] Keep v1/v2 validation and persistence compatibility
   - [x] Add strict v3 JSON Schema, Python validation tests and Fabric payload implementation
   - [x] Verify v3 observation and SQLite persistence on Vitaly's Windows machine
-- [ ] Client-only companion renderer (next milestone)
+- [ ] Client-only companion renderer
+  - [x] Add a render-only vanilla Allay instance that is never inserted into ClientLevel
+  - [x] Add local `/nika companion on|off` command
+  - [ ] Verify visual rendering, follow position and world-transition cleanup in Minecraft 1.21.11
 - [ ] Action-request authentication, capability validation and approval gates
 
 ## Phase 3: memory, skills and dialogue
