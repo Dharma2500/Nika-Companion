@@ -72,6 +72,36 @@ After installing the project with the commands above, use the two batch files in
 
 Do not launch the foreground batch while a background runtime is already running. Stop the existing runtime first with `stop_nika.bat`.
 
+## Backup and restore
+
+Create a verified SQLite backup:
+
+~~~powershell
+.\.venv\scripts\python.exe -m nika.cli backup
+~~~
+
+Verify a backup before using it:
+
+~~~powershell
+.\.venv\scripts\python.exe -m nika.cli backup-verify "C:\path\to\nika-backup.sqlite3"
+~~~
+
+Restore is deliberately interactive and requires confirmation:
+
+~~~powershell
+.\.venv\scripts\python.exe -m nika.cli restore "C:\path\to\nika-backup.sqlite3"
+~~~
+
+The restore command validates SQLite integrity and the supported schema before
+changing anything. It reserves the runtime startup lock, gracefully stops a
+responsive Nika runtime, and refuses to proceed when the runtime state is
+ambiguous or the process is still alive but unresponsive. The existing database
+and any SQLite WAL/SHM/journal sidecars are copied to
+`NIKA_DATA/backups/restore-safety/` before replacement. The new database is
+staged and verified before an atomic swap; a failed post-swap check triggers
+automatic rollback. Add `--yes` only when running an intentional non-interactive
+restore.
+
 ## Security boundary
 
 Never commit API keys, .env files, SQLite databases, chat logs, world snapshots, or backups. The local data directory is intentionally separate from the repository. See docs/security.md.
