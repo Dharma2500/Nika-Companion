@@ -36,7 +36,7 @@ final class CompanionRenderer {
 
     static void initialize() {
         ClientTickEvents.END_CLIENT_TICK.register(CompanionRenderer::tick);
-        WorldRenderEvents.AFTER_ENTITIES.register(CompanionRenderer::render);
+        WorldRenderEvents.BEFORE_ENTITIES.register(CompanionRenderer::render);
     }
 
     static boolean isEnabled() {
