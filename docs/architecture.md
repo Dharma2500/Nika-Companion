@@ -71,7 +71,7 @@ A fact about one world must not silently become a fact about every world. A reus
 
 ## Configuration validation
 
-The agent resolves `NIKA_DATA` and `NIKA_DATABASE_PATH` once from the process environment. Unset values use the documented defaults; explicitly empty values are configuration errors. Paths are expanded and resolved before use.
+The agent resolves `NIKA_DATA`, `NIKA_DATABASE_PATH` and `NIKA_LEARNING_DIR` once from the process environment. Unset values use the documented defaults; explicitly empty values are configuration errors. Paths are expanded and resolved before use.
 
 The CLI checks that the data, logs, backups, runtime and database-parent locations are directories or can be created, and checks access to existing database files. A database outside `NIKA_DATA` is supported but reported as a warning because logs, runtime state and backups remain under `NIKA_DATA`. Invalid configuration fails before logging or database initialization can create or modify files.
 
