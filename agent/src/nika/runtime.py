@@ -10,13 +10,13 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from ctypes import wintypes
 from http.client import HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from collections.abc import Iterator
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
