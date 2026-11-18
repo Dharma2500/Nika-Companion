@@ -41,3 +41,33 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  source-overlay:
+    name: Build source overlay archive
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Package tracked source files
+        run: |
+          python - <<'PY'
+          import subprocess
+          import zipfile
+
+          tracked = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          with zipfile.ZipFile("nika-companion-source-overlay.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+              for name in tracked:
+                  if name:
+                      archive.write(name, name)
+          PY
+
+      - name: Upload source overlay
+        uses: actions/upload-artifact@v4
+        with:
+          name: nika-companion-source-overlay
+          path: nika-companion-source-overlay.zip
+          if-no-files-found: error
+          retention-days: 14
