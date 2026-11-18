@@ -96,3 +96,18 @@ def test_database_path_cannot_equal_data_directory(tmp_path: Path) -> None:
         item.severity == "ERROR" and "points to NIKA_DATA itself" in item.message
         for item in findings
     )
+
+
+
+def test_service_directory_must_not_be_a_file(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "logs").write_text("occupied", encoding="utf-8")
+    settings = Settings(data_dir=data_dir, database_path=data_dir / "nika.sqlite3")
+
+    findings = diagnose_settings(settings)
+
+    assert any(
+        item.severity == "ERROR" and "Logs directory" in item.message
+        for item in findings
+    )
