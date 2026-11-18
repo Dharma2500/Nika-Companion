@@ -29,7 +29,6 @@ from nika.event_store import EventStore, NewEvent
 from nika.logging_setup import get_logger, setup_logging
 from nika.observation import (
     MAX_OBSERVATION_BYTES,
-    OBSERVATION_SCHEMA_VERSION,
     ObservationValidationError,
     decode_observation,
 )
