@@ -30,12 +30,11 @@ final class CompanionRenderer {
     private static final double MOVEMENT_THRESHOLD_SQUARED = 0.0004;
     private static final double TELEPORT_DISTANCE = 12.0;
 
-    // Stable, damped follow motion. The coefficients avoid the oscillation
-    // caused by a spring that is too strong for a 20 TPS update loop.
-    private static final double FOLLOW_SPRING = 0.12;
-    private static final double FOLLOW_DAMPING = 0.58;
-    private static final double MAX_FOLLOW_SPEED = 0.24;
-    private static final double ARRIVAL_DISTANCE = 0.025;
+    // Acceleration-limited steering gives Nika real momentum: she needs time
+    // to build speed and to brake, instead of staying locked to a fixed offset.
+    private static final double MAX_FOLLOW_SPEED = 0.40;
+    private static final double FOLLOW_ACCELERATION = 0.045;
+    private static final double ARRIVAL_DISTANCE = 0.035;
 
     private static final double IDLE_WANDER_MIN_RADIUS = 0.10;
     private static final double IDLE_WANDER_MAX_RADIUS = 0.30;
@@ -235,8 +234,13 @@ final class CompanionRenderer {
     }
 
     /**
-     * A stable damped spring: acceleration is proportional to position error,
-     * while velocity damping prevents overshoot and high-frequency jitter.
+     * Acceleration-limited velocity steering:
+     * - desired speed grows with the distance to the target;
+     * - braking distance lets Nika ease in instead of snapping to the target;
+     * - velocity can only change by a small amount on each client tick.
+     *
+     * The result is visible momentum: she falls behind when the player starts
+     * moving or changes direction, then smoothly accelerates to catch up.
      */
     private static void updateFollowMotion() {
         if (smoothedPosition == null) {
@@ -246,25 +250,33 @@ final class CompanionRenderer {
         }
 
         Vec3 displacement = desiredPosition.subtract(smoothedPosition);
-        if (displacement.lengthSqr() > TELEPORT_DISTANCE * TELEPORT_DISTANCE) {
+        double distance = displacement.length();
+        if (distance > TELEPORT_DISTANCE) {
             smoothedPosition = desiredPosition;
             followVelocity = Vec3.ZERO;
             return;
         }
 
-        Vec3 acceleration = displacement.scale(FOLLOW_SPRING)
-            .subtract(followVelocity.scale(FOLLOW_DAMPING));
-        followVelocity = followVelocity.add(acceleration);
+        double remainingDistance = Math.max(0.0, distance - ARRIVAL_DISTANCE);
+        double desiredSpeed = Math.min(
+            MAX_FOLLOW_SPEED,
+            Math.sqrt(2.0 * FOLLOW_ACCELERATION * remainingDistance)
+        );
 
-        double speed = followVelocity.length();
-        if (speed > MAX_FOLLOW_SPEED) {
-            followVelocity = followVelocity.scale(MAX_FOLLOW_SPEED / speed);
+        Vec3 desiredVelocity = distance > 1.0E-6
+            ? displacement.scale(desiredSpeed / distance)
+            : Vec3.ZERO;
+
+        Vec3 velocityChange = desiredVelocity.subtract(followVelocity);
+        double velocityChangeLength = velocityChange.length();
+        if (velocityChangeLength > FOLLOW_ACCELERATION) {
+            velocityChange = velocityChange.scale(FOLLOW_ACCELERATION / velocityChangeLength);
         }
+        followVelocity = followVelocity.add(velocityChange);
 
         smoothedPosition = smoothedPosition.add(followVelocity);
 
-        if (displacement.lengthSqr() < ARRIVAL_DISTANCE * ARRIVAL_DISTANCE
-            && followVelocity.lengthSqr() < 0.0004) {
+        if (distance < ARRIVAL_DISTANCE && followVelocity.lengthSqr() < 0.0004) {
             smoothedPosition = desiredPosition;
             followVelocity = Vec3.ZERO;
         }
