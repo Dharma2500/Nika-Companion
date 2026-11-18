@@ -175,7 +175,7 @@ No component may claim that an unknown task can be solved offline without a matc
 The in-game avatar for Nika uses the vanilla Minecraft entity called
 "Тихоня" (Allay). This supersedes the earlier alt-style avatar concept.
 
-The v0.4.2 renderer creates a client-side Allay object and submits its
+The v0.4.x renderer (current mod v0.5.0) creates a client-side Allay object and submits its
 vanilla render state through Fabric's world-render event and Minecraft's entity
 render dispatcher. The object is never added to ClientLevel, never synchronized
 with a server, and is not visible to other players. AI and gravity are disabled;
@@ -188,8 +188,8 @@ interval, so manual /nika connect is only a diagnostic fallback.
 The follow target uses filtered horizontal player displacement, never camera
 yaw. While the player moves, Nika tracks to the right and behind the travel
 direction. When horizontal movement stops, a world-space idle anchor prevents
-her from circling the player when the camera turns. A stable damped spring
-smooths position changes. Body yaw and head yaw are interpolated independently;
+her from circling the player when the camera turns. A critically damped integrator with smoothly randomized slow/fast pace phases
+smooths position changes and varies follow spacing. Body yaw and head yaw are interpolated independently;
 the head can look at the player or make occasional short glances. Small,
 infrequent idle offsets keep her gently moving near the anchor without leaving
 conversation range. The Allay instance is discarded when the player leaves the
