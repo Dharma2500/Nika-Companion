@@ -73,12 +73,28 @@ Work proceeds by verified milestones. A milestone is not complete until its test
   - [ ] Verify head/body animation, idle gestures, follow smoothness and world-transition cleanup in Minecraft 1.21.11
 - [ ] Action-request authentication, capability validation and approval gates
 
-## Phase 3: memory, skills and dialogue
+## Phase 3: Nika Intelligence (text-first)
 
-- [ ] Provenance-aware memory API and retrieval
+Design baseline: `docs/memory-dialogue-design.md`.
+
+- [ ] Database schema migration v2: conversations, conversation messages, memory provenance and world scope
+- [ ] Typed ConversationStore API with idempotent message writes
+- [ ] Typed MemoryStore API: add/get/search/list with confidence, provenance and scope validation
+- [ ] Deterministic ContextBuilder: personality, recent turns, relevant memories and only fresh world context
+- [ ] Stable Nika personality constitution and truthful fallback behavior
+- [ ] Provider manager with budgets, timeouts, model selection and graceful degradation
+- [ ] Verify an OpenAI-compatible local LM Studio endpoint on the actual Nika machine before configuring it
+- [ ] Authenticated `POST /bridge/v1/chat` endpoint with strict schema, payload limits, HMAC and replay protection
+- [ ] Plain-text Minecraft chat routing: no `/nika ask`, no per-message prefix
+  - [ ] Local Nika-chat mode enabled when the companion is summoned
+  - [ ] Configurable key binding to toggle private Nika chat vs public server chat
+  - [ ] Ordinary messages canceled before server send while private mode is active
+  - [ ] Slash commands and existing client commands remain unaffected
+  - [ ] Show local chat-mode state; if bridge is offline, do not silently swallow messages
+  - [ ] Display assistant replies only in the local client chat
+- [ ] Verify private routing, no server leakage, mode toggle, slash passthrough, offline fallback and duplicate-message protection
+- [ ] Explicit memory teaching/review flow; no silent automatic promotion of every model statement
 - [ ] Versioned skill format and user demonstration capture
-- [ ] Dialogue engine and stable personality constitution
-- [ ] Provider manager with budgets, rotation and graceful degradation
 
 ## Phase 4: safe autonomy
 
@@ -92,7 +108,7 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 
 - [ ] Local dashboard and status panel
 - [ ] Memory review and correction tools
-- [ ] Voice input/output
+- [ ] Voice input/output (only after text dialogue and memory pass acceptance)
 - [ ] Context-aware initiative controls
 
 ## Release gate
