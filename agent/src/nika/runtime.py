@@ -722,7 +722,7 @@ def serve(foreground: bool = False) -> None:
                 try:
                     event_id = event_store.append(
                         NewEvent(
-                            event_type="minecraft.observation.v1",
+                            event_type=f"minecraft.observation.v{observation['schema_version']}",
                             source="minecraft-client",
                             payload=observation,
                         )
@@ -737,7 +737,7 @@ def serve(foreground: bool = False) -> None:
                     {
                         "service": "nika",
                         "accepted": True,
-                        "schema_version": OBSERVATION_SCHEMA_VERSION,
+                        "schema_version": observation["schema_version"],
                         "event_id": event_id,
                     },
                 )
