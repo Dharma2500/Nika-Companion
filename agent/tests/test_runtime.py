@@ -338,6 +338,36 @@ def _signed_observation_request(
     )
 
 
+def _signed_chat_request(
+    status: dict[str, object],
+    body: bytes,
+    *,
+    timestamp: str | None = None,
+    nonce: str | None = None,
+) -> Request:
+    issued_at = timestamp or str(int(time.time()))
+    request_nonce = nonce or secrets.token_urlsafe(24)
+    signature = runtime.create_bridge_signature(
+        str(status["bridge_token"]),
+        "POST",
+        runtime.BRIDGE_CHAT_PATH,
+        issued_at,
+        request_nonce,
+        body,
+    )
+    return Request(
+        f"http://127.0.0.1:{status['port']}{runtime.BRIDGE_CHAT_PATH}",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Nika-Bridge-Timestamp": issued_at,
+            "X-Nika-Bridge-Nonce": request_nonce,
+            "X-Nika-Bridge-Signature": signature,
+        },
+        method="POST",
+    )
+
+
 def _sample_observation_payload() -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -354,6 +384,52 @@ def _sample_observation_payload() -> dict[str, object]:
     }
 
 
+
+
+def test_bridge_chat_without_provider_does_not_persist_user_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The runtime inherits environment variables from the test process. Keep
+    # this check deterministic even when a developer has configured LM Studio.
+    for name in ("NIKA_LLM_BASE_URL", "NIKA_LLM_MODEL", "NIKA_LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status = json.loads(
+            (settings.data_dir / "runtime" / "status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        conversation_id = str(uuid.uuid4())
+        body = json.dumps(
+            {
+                "schema_version": 1,
+                "request_id": str(uuid.uuid4()),
+                "conversation_id": conversation_id,
+                "message": "Привет, Ника!",
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        request = _signed_chat_request(status, body)
+
+        with pytest.raises(HTTPError) as error:
+            urlopen(request, timeout=2)
+        assert error.value.code == 503
+
+        database = Database(settings.database_path)
+        with database.connect() as connection:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM conversation_messages"
+            ).fetchone()[0]
+        assert count == 0
+    finally:
+        assert stop_runtime(settings)
 
 
 def test_bridge_observation_v3_persists_environment_and_player_state(
