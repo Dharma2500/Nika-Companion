@@ -251,7 +251,7 @@ def run_dashboard() -> int:
 
     print("Nika dashboard: открыта локальная панель.")
     print(f"Адрес: {dashboard_url}")
-    print("Ссылка входа одноразовая; токены не сохраняются в браузере.")
+    print("Билет одноразовый; активная сессия хранится в HttpOnly cookie до одного часа.")
     return 0
 
 
