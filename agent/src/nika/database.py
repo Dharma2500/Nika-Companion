@@ -53,7 +53,7 @@ _MIGRATION_1 = (
 
 _MIGRATION_2 = (
     """ALTER TABLE memories ADD COLUMN provenance_type TEXT NOT NULL
-        DEFAULT 'user_taught'
+        DEFAULT 'hypothesis'
         CHECK (provenance_type IN (
             'user_taught', 'observed', 'verified', 'inferred', 'hypothesis'
         ))""",
