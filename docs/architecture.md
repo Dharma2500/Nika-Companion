@@ -61,7 +61,13 @@ The event journal is written locally before optional model analysis. Raw high-vo
 
 A user-triggered `/nika observe` request reads only a compact region around the local player: 5×3×5 positions, limited to already loaded client chunks. The sample records up to 32 non-air blocks, each with its namespaced block ID and at most 12 state properties. The payload also reports the scan count and whether block entries were truncated. The request remains capped at 8 KiB.
 
-The observer reads `BlockState` only. It does not inspect block entities, container inventories, sign text, NBT, chat, other players or hidden server state. There is no automatic polling. The Python validator accepts both observation schema v1 and v2; each event is persisted with its corresponding versioned event type. Future continuous observation must aggregate and deduplicate changes locally before persistence or model context assembly.
+The observer reads `BlockState` only. It does not inspect block entities, container inventories, sign text, NBT, chat, other players or hidden server state. There is no automatic polling. The Python validator accepts observation schemas v1, v2 and v3; each event is persisted with its corresponding versioned event type. Future continuous observation must aggregate and deduplicate changes locally before persistence or model context assembly.
+
+### Minecraft observation v3
+
+A user-triggered `/nika observe` retains the v2 block sample and adds a compact environment object: biome at the player's current loaded position, time-of-day ticks, rain/thunder flags and local light level at that same position. It also adds the local player's game mode and one-shot on-ground, sprinting, swimming and crouching flags.
+
+Spatial environment reads are guarded by a loaded-chunk check. Movement is represented as a handful of booleans, not a movement trace. Inventory contents, chat, server identity, other players, entities and block-entity data remain excluded. The payload stays within the same 8 KiB limit, and v1/v2 validation and persistence remain supported.
 
 
 ## Memory provenance
