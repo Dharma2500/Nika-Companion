@@ -48,7 +48,7 @@ class MemoryInput:
     content: str
     source: str
     confidence: float
-    provenance_type: str = "user_taught"
+    provenance_type: str = "hypothesis"
     scope: str = "global"
     world_id: str | None = None
     tags: tuple[str, ...] = ()
