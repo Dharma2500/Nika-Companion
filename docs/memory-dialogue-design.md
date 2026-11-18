@@ -125,6 +125,22 @@ The provider interface will be OpenAI-compatible and provider-independent. Local
 - The bridge remains loopback-only and authenticated.
 - The user can always switch back to ordinary server chat with the configured key binding.
 
+## Implementation status
+
+Implemented in the current feature branch:
+- SQLite schema migration 2. Existing v1 memories are preserved; legacy rows receive compatibility defaults and are not marked verified.
+- Typed `MemoryStore`: add/get/recent/search with provenance, confidence, tags and global/world scope.
+- Typed `ConversationStore`: conversation creation, ordered history retrieval, bounded message validation and request-id idempotency.
+- Deterministic `ContextBuilder`: stable personality instructions, recent history, relevant memories with provenance labels and a hard UTF-8 byte budget.
+- Initial keyword retrieval uses bounded candidate reads and Python Unicode casefolding, so Russian text is searched case-insensitively. Embeddings/semantic retrieval are not implemented.
+- Current ContextBuilder intentionally returns `world_context: null`. It does not pretend to know the current world. Fresh observation attachment will be added only after a scoped/freshness contract is implemented.
+
+Not implemented yet:
+- LLM provider manager or a verified LM Studio connection.
+- Authenticated chat endpoint.
+- Fabric chat input interception, key binding and local response rendering.
+- Automatic memory extraction or voice.
+
 ## Implementation order
 
 1. Database schema migration 2 and tests.
