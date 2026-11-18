@@ -64,3 +64,13 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Fabric build 44413370724 passed; Python CI 44413370413 passed all six Python 3.11/3.12/3.13 Windows/Ubuntu jobs plus source overlay.
 - Artifact ID 14478771154. Delivered JAR nika-companion-0.5.0.jar, SHA-256 `8fcc2912fa894cbeb8c85b49d81e57067191860331f6c8fc901ad3cb0707ef62`. Verified Fabric metadata version and NikaChatClient/BridgeClient classes.
 - Actual LM Studio endpoint/model remains unconfigured/unverified on the PC running Nika. In-game privacy/keybind/slash/fallback acceptance remains untested. Next: verify local /v1/models, configure NIKA_LLM_BASE_URL/NIKA_LLM_MODEL (and optional key) locally, test end-to-end private chat with a trusted server.
+
+## 2026-11-19: recovery after interrupted chat and v0.5.1 CI re-check
+
+- Recovered prior project decisions from conversation history and checked the live private repository, PR #1 and the canonical handoff.
+- Confirmed PR #1 remains open/draft, branch feature/companion-renderer-v0.4.0, current head 69c6ac0d8ea0346ee43b77d2d80d043c70ec37b3; main remains unchanged.
+- Reconfirmed v0.5.1 ordinary unprefixed Minecraft chat with configurable N toggle and fail-closed privacy. Slash commands remain separate. If Nika is unavailable while private mode is active, text is blocked locally and is not sent to multiplayer chat.
+- Latest Fabric run 44416364837 and Python CI run 44416364976 failed before steps started. Job step lists are empty, Fabric logs return BlobNotFound, and neither run has artifacts. This is not evidence of a source-code/test failure; v0.5.1 remains CI-unverified and no v0.5.1 JAR exists.
+- Current blocker is runner allocation. Account billing/usage/budget and repository Actions settings must be checked by Vitaly; billing exhaustion is only a hypothesis until verified.
+- Found that this file's sibling PROJECT_CONTEXT.md was an outdated v0.5.0 snapshot with contradictory public-chat fallback behavior. Consolidated the canonical handoff in docs/CHAT_CONTEXT.md and replaced the duplicate with a pointer.
+- Next: inspect GitHub Billing & licensing → Usage / Budgets and alerts, then repository Settings → Actions → General; restore runner allocation; run current-head Fabric and Python checks; deliver only a verified v0.5.1 JAR; configure local LM Studio and complete manual Minecraft privacy acceptance. Do not merge PR #1 without explicit approval.
