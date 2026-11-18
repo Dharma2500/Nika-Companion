@@ -145,6 +145,10 @@ class BackupManager:
                 raise sqlite3.DatabaseError(
                     "The restored database failed its post-install integrity check."
                 )
+            # Read-only verification can create transient WAL/SHM files for a
+            # database whose persistent journal mode is WAL.
+            for sidecar in sidecars:
+                sidecar.unlink(missing_ok=True)
 
             return safety_dir
         except Exception as error:
