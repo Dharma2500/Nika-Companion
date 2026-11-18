@@ -229,7 +229,7 @@ def test_validate_observation_requires_consistent_block_truncation() -> None:
     payload["world"]["block_sample"]["non_air_blocks"] = 33
     payload["world"]["block_sample"]["truncated"] = False
 
-    with pytest.raises(ObservationValidationError, match="inconsistent"):
+    with pytest.raises(ObservationValidationError, match="without setting the truncation flag"):
         validate_observation(payload)
 
 
