@@ -91,9 +91,9 @@ Design baseline: `docs/memory-dialogue-design.md`.
   - [x] Configurable key binding (default N) to toggle private Nika chat vs public server chat
   - [x] Ordinary messages are intercepted whenever private mode is active; sent only to the local bridge when `dialogue.chat` is available, otherwise blocked locally
   - [x] Slash commands and existing client commands remain unaffected
-  - [x] Show routing state; when bridge/provider is unavailable in private mode, block locally with a warning and require an explicit N toggle to use server chat
+  - [x] Show routing state; when bridge/provider is unavailable in private mode, fall back to public server chat with a local warning
   - [x] Display user echo and assistant replies only in the local client chat
-- [ ] Verify in Minecraft 1.21.11: private message/reply never reaches server, N toggle works, slash passthrough, fail-closed provider-offline behavior and chat-mode behavior during world transitions
+- [ ] Verify in Minecraft 1.21.11: private message/reply never reaches server, N toggle works, slash passthrough, provider-offline public fallback warning and chat-mode behavior during world transitions
 - [ ] Explicit memory teaching/review flow; no silent automatic promotion of every model statement
 - [ ] Versioned skill format and user demonstration capture
 
