@@ -31,22 +31,22 @@ Purpose: this file is the authoritative handoff for continuing Nika-Companion af
 
 ## 3. Current source-control state
 
-- Active branch: `feature/companion-renderer-v0.4.0`
-- Current PR: #1, https://github.com/Dharma2500/Nika-Companion/pull/1
-- Current PR title: `Nika Companion: memory, context and provider foundation (draft)`
-- PR target: `main`
-- PR state: open, draft. Do not merge without approval.
-- Main branch has not been changed by this feature work.
-- Current branch head before this handoff refresh: `b48e8e675155be03eda2e6eaee5bb4261e2fe4e5`.
-- Latest code commit for the provider adapter: `87fec3ecb9fd580b0f96e3c689962d6515a70c2e`.
-- Latest documentation/handoff updates are in commits `daab2825c2c7cf38cd3809850a34173d87bfa4d9`, `4e3d37b2650424e33eca6f1562ac7ddd179e3c86`, `f0e2adac5dc4745596e484f5853326deda768d66`, `4424a43ae44d3cb1edfc537084efd1b2add34a51`, `2829c613340d7cbd38c0559c7a2c7e651c1f7f9c`, and `b48e8e675155be03eda2e6eaee5bb4261e2fe4e5`.
-- Latest Python CI for provider code: run 44409119993, completed successfully across all six Python 3.11/3.12/3.13 Windows/Ubuntu jobs, including Ruff lint and tests.
-- Latest Fabric build for provider code: run 44409120014, completed successfully.
-- Latest CI after documentation/handoff refresh: Python run 44409618003 and Fabric build run 44409617953, both completed successfully. Source overlay job also passed.
-- Latest delivered mod: v0.4.5. Fabric workflow: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839400. Python CI: https://github.com/Dharma2500/Nika-Companion/actions/runs/44403839669.
-- v0.4.5 artifact ID: 14472782965, artifact name `nika-companion-fabric-1.21.11`; JAR `nika-companion-0.4.5.jar` was delivered.
-- Vitaly manually tested v0.4.5 and confirmed follow distance varies and movement feels much better.
-- No new JAR was produced for the Nika Intelligence foundation/provider adapter because the Minecraft client source did not change. Never send an older JAR as though it were a new build.
+- Repository: private Dharma2500/Nika-Companion. Keep it private.
+- Active branch: feature/companion-renderer-v0.4.0.
+- PR #1: https://github.com/Dharma2500/Nika-Companion/pull/1
+- PR title: Nika Companion v0.5.0: private plain-text chat and intelligence foundation (draft).
+- PR target main; open and draft. Do not merge without Vitaly's explicit approval.
+- Main remains unchanged.
+- Branch head before this continuity refresh: aee1198da156306bcb660528a40588f452fe299b.
+- Minecraft mod version: v0.5.0. Gradle mod_version and runtime MOD_VERSION are both 0.5.0.
+- Fabric build run 44413370724: success; artifact ID 14478771154, artifact name nika-companion-fabric-1.21.11.
+- Python CI run 44413370413: success; all six Python 3.11/3.12/3.13 Windows/Ubuntu jobs, Ruff, tests and source overlay passed.
+- Delivered JAR: nika-companion-0.5.0.jar. It was downloaded from the successful Actions artifact and verified to contain NikaChatClient.class, updated BridgeClient.class and Fabric metadata version 0.5.0.
+- JAR SHA-256: 8fcc2912fa894cbeb8c85b49d81e57067191860331f6c8fc901ad3cb0707ef62.
+- Verified local assistant-container path: /mnt/data/nika-companion-0.5.0.jar.
+- Artifact expiry: 2026-12-02.
+- Vitaly confirmed v0.4.5 follow spacing varies and movement feels much better.
+- v0.5.0 has passed CI/build but still needs manual Minecraft privacy/input-flow acceptance and real LM Studio configuration. CI success does not prove live multiplayer privacy.
 
 ## 4. Minecraft companion behavior already implemented
 
@@ -86,57 +86,69 @@ Outstanding visual acceptance checks remain: extended camera-turn while idle, di
 ## 5. Current Python Core and bridge
 
 Main Python files:
-- `agent/src/nika/database.py`
-- `agent/src/nika/event_store.py`
-- `agent/src/nika/runtime.py`
-- `agent/src/nika/observation.py`
-- `agent/src/nika/config.py`
-- `agent/src/nika/memory.py`
-- `agent/src/nika/context.py`
-- `agent/src/nika/provider.py`
+- agent/src/nika/database.py
+- agent/src/nika/event_store.py
+- agent/src/nika/runtime.py
+- agent/src/nika/observation.py
+- agent/src/nika/config.py
+- agent/src/nika/memory.py
+- agent/src/nika/context.py
+- agent/src/nika/provider.py
+- agent/src/nika/dialogue.py
 
-### Persistence and typed APIs
-
+### Persistence, memory and context
 - SQLite schema version 2.
-- Tables: `event_log`, `memories`, `skills`, `world_facts`, `conversations`, `conversation_messages`.
+- Tables: event_log, memories, skills, world_facts, conversations, conversation_messages.
 - Migration v1 remains intact; migration v2 adds conversation history and memory provenance/scope/tags.
-- Legacy v1 memory records receive cautious provenance `hypothesis`, never automatically `verified` or `user_taught`.
-- `MemoryStore`: add/get/recent/search, confidence/provenance/tags validation, global/world scope, bounded keyword candidates and Python Unicode `casefold()` for Russian case-insensitive matching.
-- `ConversationStore`: create/get conversation, append user/assistant/system messages, recent chronological retrieval, request_id idempotency and bounded metadata/content.
-- User message limit at storage layer: 4,000 characters; assistant/system: 12,000. Metadata: 4 KiB.
-- `ContextBuilder`: deterministic structured context with Nika personality constitution, up to 12 recent turns, up to 6 relevant memories with provenance/confidence, hard 12 KiB UTF-8 package budget. Old history and low-ranked memories are trimmed first.
-- ContextBuilder intentionally returns `world_context: null` until a freshness/scope contract for actual observations exists. Never pretend stale observation is live world state.
-- `BackupManager` accepts supported schema-v1 backups and migrates only a staged temporary copy to schema v2 before atomic restore. The original backup is not modified. Schema 0/future unsupported versions are rejected. The regression test verifies legacy event/memory preservation and cautious provenance.
+- Legacy v1 memories receive cautious provenance hypothesis, never automatically verified or user_taught.
+- MemoryStore: add/get/recent/search, confidence/provenance/tags validation, global/world scope, bounded keyword candidates and Python Unicode casefold() for Russian case-insensitive matching.
+- ConversationStore: create/get conversation, append user/assistant/system messages, recent chronological retrieval, request_id idempotency and bounded metadata/content.
+- User message limit 4,000 characters; assistant/system 12,000. Metadata 4 KiB.
+- ContextBuilder: stable Nika constitution, up to 12 recent turns, up to 6 relevant memories with provenance/confidence, hard 12 KiB UTF-8 budget. Old history and low-ranked memories are trimmed first.
+- ContextBuilder returns world_context null until observation freshness/scope checks exist. Never claim stale observation is live world state.
+- Legacy schema-v1 backups are migrated only on a staged temporary copy to schema v2 before atomic restore; original backup remains unchanged.
 
 ### Provider adapter
-
-- `agent/src/nika/provider.py`: `ProviderConfig`, `load_provider_config`, `OpenAICompatibleProvider`, `ProviderManager`.
-- Environment: `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, optional `NIKA_LLM_API_KEY`. No endpoint, model or credential is committed or hard-coded.
-- OpenAI-compatible `POST {base_url}/chat/completions` via Python standard library `urllib`; no third-party HTTP dependency.
+- agent/src/nika/provider.py: ProviderConfig, load_provider_config, OpenAICompatibleProvider, ProviderManager.
+- Environment: NIKA_LLM_BASE_URL, NIKA_LLM_MODEL, optional NIKA_LLM_API_KEY. No endpoint, model or credential is committed or hard-coded.
+- OpenAI-compatible POST {base_url}/chat/completions via Python standard library urllib; no third-party HTTP dependency.
 - Bounds: HTTP(S) URL validation; timeout 1–120 sec; request 32 KiB; response 64 KiB; assistant reply 12,000 characters; max_tokens 1–4096; temperature 0–2.
 - API key, prompts and provider response bodies are not logged. Provider failures are sanitized.
 - Fake local HTTP-server tests cover config parsing, request body, response parsing, HTTP errors, oversized bodies and missing provider.
-- ProviderManager currently wraps one optional provider. Budgets, failover/rotation and full degraded-mode orchestration are not implemented yet.
-- Important: the actual LM Studio endpoint and model ID on the PC running the Nika runtime have NOT been verified/configured yet. Do not assume localhost/model IDs until checked on that PC.
+- ProviderManager currently wraps one optional provider. Budgets, failover/rotation and full degraded-mode orchestration are not implemented.
+- Actual LM Studio endpoint and exact model ID on the PC running Nika have NOT been verified/configured. Do not assume localhost/model IDs until checked on that PC.
 
-### Runtime/bridge
-
+### Runtime and authenticated bridge
 - Local HTTP runtime is bound to IPv4 loopback.
-- Bridge protocol v1.
-- HMAC-SHA256 authentication over method, exact path, timestamp, nonce and SHA-256 request body.
-- Timestamp window and nonce/replay protection.
-- Existing routes: signed `GET /bridge/v1/hello` and signed `POST /bridge/v1/observe`.
-- Observation endpoint accepts strict bounded v1/v2/v3 schemas; current max observation payload is 8 KiB.
-- No authenticated chat route exists yet; the provider adapter is not yet wired into runtime.
-- Bridge token is stored locally in `NIKA_DATA/runtime/status.json`, never committed.
-- Current `Settings` still covers filesystem paths; provider settings are read separately by `load_provider_config()`.
+- Bridge protocol v1; HMAC-SHA256 over method, exact path, timestamp, nonce and SHA-256 request body, with timestamp window and nonce/replay protection.
+- Routes: signed GET /bridge/v1/hello, signed POST /bridge/v1/observe, signed POST /bridge/v1/chat.
+- Observation endpoint accepts strict bounded v1/v2/v3 schemas; maximum payload 8 KiB.
+- Chat endpoint POST /bridge/v1/chat:
+  - Strict schema v1, duplicate/unknown JSON field rejection, canonical UUIDs, UTF-8 checks.
+  - Maximum request body 16 KiB, user text 4,000 characters.
+  - Reuses HMAC/timestamp/nonce replay protection.
+  - Persists user message first, calls ContextBuilder/ProviderManager outside SQLite write transactions, then persists assistant reply.
+  - User and assistant request IDs are unique. Repeated request with same ID/content returns cached assistant reply without another model call; same ID with different content returns HTTP 409.
+  - No provider configured returns HTTP 503 before persisting user message; provider failure returns sanitized 503.
+  - Message text is never included in runtime diagnostics logs.
+- Hello response advertises dialogue.chat only when provider settings loaded successfully at runtime startup.
+- Bridge token lives in NIKA_DATA/runtime/status.json; never commit.
+- Provider environment changes require restarting the Python runtime so capability state is recalculated.
+
+### Minecraft client chat adapter
+- NikaChatClient.java intercepts outgoing ordinary chat with Fabric ClientSendMessageEvents.ALLOW_CHAT.
+- It cancels only when Nika private mode is active, Nika is summoned, and bridge handshake advertises dialogue.chat.
+- User message echo and assistant reply are displayed locally only.
+- Key binding default N toggles private Nika chat vs public server chat; configurable in Controls. Presses while another screen/chat input is open are discarded to avoid eating a typed N.
+- /nika summons and enables private mode; /nika dismiss hides Nika and disables private mode. Slash commands remain on their separate command event path.
+- If bridge/provider is unavailable before send, ordinary text falls back to server chat with a local warning. If a request fails after interception, local error says the message was not sent to server.
+- Conversation UUID is local to the current client-world session and resets when client level changes.
+- No incoming chat capture, player/server messages, inventory, block entities, containers, hidden state or other-player data are collected.
 
 ### Observation boundary
-
-- User-triggered only via `/nika observe`.
+- User-triggered only via /nika observe.
 - v3 includes client versions; dimension; bounded loaded-only 5×3×5 block sample (max 32 non-air blocks, 12 properties per block); biome; time-of-day; rain/thunder; local light; game mode; one-shot on-ground/sprint/swim/crouch state.
-- No automatic polling, received chat capture, inventory dump, block entities, container contents, hidden server state or other-player data.
-- Preserve manual-only observation and strict 8 KiB ceiling until the user explicitly approves a separately scoped feature.
+- No automatic polling. Keep manual-only observation and strict 8 KiB ceiling until separately approved.
 
 ## 6. New user requirements and product decisions (2026-11-19)
 
@@ -225,74 +237,59 @@ Validation:
 
 Next: verify the actual LM Studio host and model ID on the machine running Nika. Check the local `/v1/models` endpoint and use its exact model ID. Configure the three environment variables only locally, never in Git. Then implement authenticated `POST /bridge/v1/chat`, persist the user message before model work, assemble ContextBuilder output, persist the assistant reply and return it to the Fabric client. Finally implement ordinary private chat using Fabric's outgoing-chat allow event, a configurable key binding to toggle public server chat, local-only replies and slash-command passthrough.
 
-## 7. Next development milestone: Nika Intelligence 0.5.x
+## 6.3 Authenticated plain-text chat implemented in v0.5.0 (2026-11-19)
 
-Do not jump straight to voice. Build the deterministic foundation first.
+User requirement: Vitaly addresses Nika by writing ordinary text in the Minecraft chat field. No /nika ask, slash command or per-message prefix.
 
-### Step 1: database schema migration 2
-- Keep all v1 data intact.
-- Add `conversations` and `conversation_messages` tables.
-- Add provenance and scope columns to existing `memories`: provenance type (`user_taught`, `observed`, `verified`, `inferred`, `hypothesis`), scope (`global` or `world`), optional world_id, bounded tags.
-- Add constraints, indexes, foreign keys, safe migrations and tests.
-- Never label old memories as verified by default.
+Files:
+- Python: agent/src/nika/dialogue.py, agent/src/nika/runtime.py, agent/src/nika/memory.py.
+- Tests: agent/tests/test_dialogue.py, agent/tests/test_chat_bridge.py, plus memory/context/provider tests.
+- Fabric: minecraft-mod/src/client/java/ru/vitaly/nika/BridgeClient.java, NikaChatClient.java, NikaCompanionClient.java.
+- Translations: minecraft-mod/src/main/resources/assets/nika_companion/lang/en_us.json and ru_ru.json.
 
-### Step 2: typed storage APIs
-- ConversationStore: create/get conversation, append message idempotently, fetch recent messages chronologically.
-- MemoryStore: add/get/search/list memories with strict validation, confidence, provenance and world scope.
-- Do not embed arbitrary SQL inside runtime handler code.
+Behavior:
+- /nika summons Nika and activates private mode.
+- Type normal text in Minecraft chat. Fabric intercepts ordinary outgoing chat only when bridge capability dialogue.chat is available. It cancels server transmission, forwards to the local Python bridge and displays the reply locally.
+- Press N (configurable in Controls) to switch private Nika chat vs public server chat.
+- /nika dismiss hides Nika and returns routing to public server chat.
+- Slash commands remain untouched.
+- If provider/bridge is unavailable before send, normal text falls back to server chat with a local warning. If a request fails after private interception, local error explicitly says it was not sent to server.
+- Chat route is authenticated and idempotent; message text is not written to runtime logs.
+- Private mode and provider availability are separate: a real LM Studio endpoint/model must still be configured on the target machine.
 
-### Step 3: ContextBuilder
-- Provider-independent, deterministic structured output.
-- Sections: Nika personality constitution, last 12 turns, up to 6 relevant memories with provenance/confidence labels, and only fresh/scope-valid world context.
-- Hard context budget and content truncation rules.
-- Never claim current world knowledge from stale observations.
+CI and delivery:
+- Fabric build run 44413370724: success.
+- Python CI run 44413370413: success. All six Python 3.11/3.12/3.13 Windows/Ubuntu jobs and source overlay passed.
+- JAR artifact ID 14478771154.
+- Delivered JAR v0.5.0 SHA-256 8fcc2912fa894cbeb8c85b49d81e57067191860331f6c8fc901ad3cb0707ef62.
+- In-game private-routing/privacy behavior has NOT yet been manually tested.
 
-### Step 4: provider manager
-- OpenAI-compatible adapter design, local LM Studio as first candidate only after verifying the endpoint/model on the actual Nika machine.
-- No model endpoint or model name is assumed yet.
-- Timeouts, bounded responses, offline diagnostics, no fake AI response.
+## 7. Next development tasks after v0.5.0
 
-### Step 5: authenticated dialogue route
-- Add strict, versioned `POST /bridge/v1/chat` with HMAC/replay protection.
-- Suggested body limit: 16 KiB, user text ceiling 4,000 Unicode characters.
-- Persist user message before provider call, never hold a write transaction across a network call.
-- Persist assistant answer after validation.
-- Client-generated request ID provides idempotency in addition to nonce replay protection.
-- Do not log chat bodies.
+Do not move to voice yet. First connect a real local model and verify privacy/input flow in Minecraft.
 
-### Step 6: Fabric plain-chat routing
-- Implement `ClientSendMessageEvents.ALLOW_CHAT` in Nika-chat mode.
-- Intercept ordinary messages only, cancel network send, queue bridge call asynchronously.
-- Keep slash commands untouched.
-- Display local conversation and assistant reply in Minecraft chat.
-- Configurable key binding toggles local Nika chat vs server chat.
-- No ordinary text is sent to the multiplayer server while private routing mode is enabled.
-
-### Step 7: manual acceptance
-- Plain sentence reaches Nika without slash/prefix.
-- Message is not visible to server/other players.
-- Reply appears locally in chat.
-- Keybind restores normal public chat.
-- Slash commands still work.
-- Bridge offline does not swallow text.
-- Long/empty/repeated messages are handled safely.
-- World transition resets only session context where appropriate.
-- No chat text appears in diagnostics logs.
-
-Voice input/output and proactive initiative follow only after text dialogue is reliable. No world-changing actions until capability validation, approval gates, emergency stop and disposable-world tests exist.
-
-## 8. Known issue to address before next Fabric release
-
-`NikaCompanionClient.java` currently appears to contain a hard-coded `MOD_VERSION = "0.4.2"` while Gradle's `mod_version` and delivered artifact are v0.4.5. Correct this before the next Fabric JAR, ideally derive the runtime version from generated Fabric metadata or keep the constant in sync with `mod_version`.
+1. Verify the LM Studio base URL on the PC running the Nika Python runtime. Query its local /v1/models endpoint and use the exact model ID returned.
+2. Configure NIKA_LLM_BASE_URL, NIKA_LLM_MODEL and optional NIKA_LLM_API_KEY locally only. Never commit credentials. Restart the Python runtime after changing values.
+3. Run an end-to-end chat request and ensure hello advertises dialogue.chat.
+4. Manual Minecraft 1.21.11 acceptance:
+   - invoke /nika;
+   - send ordinary text without prefix;
+   - verify the text and answer are not visible to other players/server;
+   - press N and verify messages go to public server chat;
+   - verify slash commands still work;
+   - stop provider/bridge and verify clear public fallback warning;
+   - test long text, repeated send and world/dimension transition.
+5. Improve provider manager budgets, failover/rotation and safe offline diagnostics.
+6. Add explicit memory teaching/review UX. Do not silently promote model-generated statements to durable memories.
+7. Only after text dialogue and memory are reliable, add voice input/output and context-aware initiative.
+8. No autonomous world-changing actions until capability validation, explicit approval gates, emergency stop and disposable-world regression tests exist.
 
 ## 9. Immediate next actions
 
-1. Check active branch head, PR #1 and Actions state before editing.
-2. Verify LM Studio is reachable on the actual PC running the Nika Python runtime; request the exact model ID from the local `/v1/models` endpoint.
-3. Configure `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, and optional `NIKA_LLM_API_KEY` locally. Never commit the key.
-4. Add a provider diagnostic command/report that does not expose credentials or chat content.
-5. Implement authenticated `POST /bridge/v1/chat` with strict schema, 16 KiB payload bound, 4,000-char user message ceiling, HMAC/replay checks and request-id idempotency.
-6. Persist the user message before provider work, call ContextBuilder and ProviderManager outside write transactions, then persist and return the assistant reply.
-7. Implement Fabric ordinary chat interception: local private mode while Nika is summoned, configurable key binding (default N) for public server chat, slash commands untouched, visible routing status, local-only reply display and automatic fallback to server chat if bridge is unavailable.
-8. Fix hard-coded `MOD_VERSION = "0.4.2"` in `NikaCompanionClient.java` before the next Fabric JAR; preferably derive it from Fabric metadata.
-9. Update this file and `CHAT_LOG.md` after each substantive Nika project response.
+1. Verify the actual LM Studio endpoint and exact model ID on the PC running the Python runtime. Do not guess.
+2. Configure NIKA_LLM_BASE_URL, NIKA_LLM_MODEL and optional NIKA_LLM_API_KEY locally; restart runtime and check hello capability dialogue.chat.
+3. Install and manually test nika-companion-0.5.0.jar on Minecraft 1.21.11 using a disposable/private test world or trusted server.
+4. Test no server leakage, N key toggle, slash commands, provider-offline fallback, duplicate messages and world transitions.
+5. If issues are found, inspect them and fix on the feature branch.
+6. Update this handoff and CHAT_LOG.md after every substantive Nika project response.
+
