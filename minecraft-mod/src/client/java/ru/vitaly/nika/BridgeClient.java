@@ -218,7 +218,7 @@ final class BridgeClient {
             if (!"nika".equals(acknowledgement.get("service").getAsString())
                 || !acknowledgement.get("accepted").getAsBoolean()
                 || acknowledgement.get("schema_version").getAsInt() < 1
-                || acknowledgement.get("schema_version").getAsInt() > 2) {
+                || acknowledgement.get("schema_version").getAsInt() > 3) {
                 return observationFail("Unexpected observation acknowledgement.");
             }
 
