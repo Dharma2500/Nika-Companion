@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from nika.backup import BackupManager
-from nika.database import _MIGRATION_1, Database, SCHEMA_VERSION
+from nika.database import Database, SCHEMA_VERSION
 
 
 def test_backup_is_created_and_verified(tmp_path: Path) -> None:
@@ -275,8 +275,49 @@ def test_restore_migrates_v1_backup_without_modifying_source(
     legacy_path = tmp_path / "legacy-v1.sqlite3"
     legacy_connection = sqlite3.connect(legacy_path)
     try:
-        for statement in _MIGRATION_1:
-            legacy_connection.execute(statement)
+        legacy_connection.executescript(
+            """
+            CREATE TABLE event_log (
+                event_id TEXT PRIMARY KEY,
+                occurred_at TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                source TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            );
+            CREATE TABLE memories (
+                memory_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                category TEXT NOT NULL,
+                content TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NOT NULL
+                    CHECK (confidence >= 0.0 AND confidence <= 1.0)
+            );
+            CREATE TABLE skills (
+                skill_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                definition_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NOT NULL
+                    CHECK (confidence >= 0.0 AND confidence <= 1.0),
+                UNIQUE (name, version)
+            );
+            CREATE TABLE world_facts (
+                fact_id TEXT PRIMARY KEY,
+                world_id TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                fact_type TEXT NOT NULL,
+                value_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NOT NULL
+                    CHECK (confidence >= 0.0 AND confidence <= 1.0)
+            );
+            """
+        )
         legacy_connection.execute(
             "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
             ("legacy-event", "2026-01-01T00:00:00+00:00", "test", "legacy", "{}"),
@@ -309,7 +350,7 @@ def test_restore_migrates_v1_backup_without_modifying_source(
     assert safety_path is not None
     assert _event_rows(database) == ["legacy-event"]
     with database.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
         memory = connection.execute(
             "SELECT content, provenance_type, scope FROM memories "
             "WHERE memory_id = 'legacy-memory'"
