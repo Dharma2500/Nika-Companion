@@ -148,6 +148,8 @@ limited to 8 KiB.
 The payload contains only the client Minecraft/mod versions, current dimension,
 player coordinates, health, food level and selected item identifier. It does
 not include chat, inventory contents, server address, player identity or other
-players. The schema and validator are implemented and tested; no observation
-HTTP endpoint or automatic polling is enabled yet. The first live observation
-will be an explicit user-triggered snapshot.
+players. The signed `POST /bridge/v1/observe` endpoint accepts the payload only
+after HMAC and nonce verification. Python validates the JSON before appending
+a `minecraft.observation.v1` event to the local SQLite journal. The client
+exposes this through the explicit `/nika observe` command. No automatic
+polling, chat transfer or world-changing action is enabled.
