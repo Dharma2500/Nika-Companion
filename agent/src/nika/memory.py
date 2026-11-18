@@ -370,7 +370,7 @@ class ConversationStore:
             if message.request_id is not None
             else None
         )
-        metadata = message.metadata or {}
+        metadata = {} if message.metadata is None else message.metadata
         if not isinstance(metadata, dict):
             raise MemoryValidationError("metadata must be a JSON object.")
         try:
