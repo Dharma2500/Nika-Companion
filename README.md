@@ -1,6 +1,6 @@
 # Nika-Companion
 
-Nika is a private, evolving AI companion designed to work alongside Vitaly in Minecraft and outside the game.
+Nika is a personal, evolving local-first AI companion designed to work alongside Vitaly in Minecraft and outside the game.
 
 The project is built in small, testable layers. The local agent and persistent memory must remain useful when an external AI API is unavailable. Minecraft integration is client-side and must respect the actual permissions and capabilities available in each world or server.
 
@@ -21,9 +21,15 @@ The project is built in small, testable layers. The local agent and persistent m
 | Persistent SQLite memory | Schema v2; provenance-aware MemoryStore, ConversationStore and bounded ContextBuilder implemented; legacy v1 records preserved |
 | Model provider adapter | Bounded OpenAI-compatible adapter and environment-based configuration implemented; actual LM Studio endpoint/model not yet verified or configured |
 | Local configuration | Environment-based, no secrets required |
-| Automated Python checks | GitHub Actions workflow added |
-| Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; v0.5.0 baseline build verified, current v0.5.1 CI runner allocation unresolved; v1/v2/v3 local persistence verified |
-| Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private chat with fail-closed offline handling; v0.5.1 integration test added but current-head CI has not executed it; in-game privacy acceptance remains |
+| Automated Python checks | GitHub Actions run #346: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 157 tests passed in each job; source overlay archive built |
+| Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; current Fabric build #130 passed and produced the v0.5.1 JAR; v1/v2/v3 local persistence verified |
+| Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private chat with fail-closed offline handling; v0.5.1 integration tests passed in all six Python CI jobs; in-game privacy acceptance remains |
+
+
+
+Latest verified workflows:
+- [Fabric build #130](https://github.com/Dharma2500/Nika-Companion/actions/runs/44419018875) — successful; artifact `nika-companion-fabric-1.21.11`.
+- [Python CI #346](https://github.com/Dharma2500/Nika-Companion/actions/runs/44419018898) — all six matrix jobs and the source overlay job successful.
 
 ## Quick start
 
