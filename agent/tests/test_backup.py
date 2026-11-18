@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from nika.backup import BackupManager
-from nika.database import Database, SCHEMA_VERSION
+from nika.database import Database
 
 
 def test_backup_is_created_and_verified(tmp_path: Path) -> None:
