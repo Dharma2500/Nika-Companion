@@ -239,3 +239,51 @@ after HMAC and nonce verification. Python validates the JSON before appending
 a `minecraft.observation.v1` event to the local SQLite journal. The client
 exposes this through the explicit `/nika observe` command. No automatic
 polling, chat transfer or world-changing action is enabled.
+
+
+## Local dashboard: read-only milestone
+
+The dashboard is served by the existing Python runtime over its loopback-only
+ThreadingHTTPServer. It uses the same ephemeral 127.0.0.1 port as the local
+control and Minecraft bridge endpoints. It is not a second public/LAN listener.
+
+### Browser bootstrap and session
+
+1. nika dashboard starts the runtime if needed, then the CLI reads the local
+   runtime status file and uses the runtime control token locally to request a
+   dashboard ticket.
+2. The runtime stores the random ticket in memory for 60 seconds. The CLI opens
+   /dashboard/#ticket=...; the fragment is not included in the initial HTTP
+   request.
+3. The page immediately removes the fragment from browser history and exchanges
+   the ticket with POST /dashboard/session/exchange.
+4. The runtime checks the exact local Host, same-origin Origin and
+   Sec-Fetch-Site, consumes the ticket once, and sets an opaque
+   HttpOnly; SameSite=Strict cookie scoped to /dashboard for one hour.
+5. GET /dashboard/api/status requires that in-memory session. A runtime
+   restart invalidates all dashboard sessions.
+
+The dashboard API returns only runtime state/uptime, database integrity and
+schema version, aggregate row counts, provider configured/not-configured state
+and advertised capabilities. It does not return conversation content, model
+endpoint URLs, API keys, runtime control token or bridge HMAC token.
+
+### Browser security
+
+- The server binds only to 127.0.0.1, uses an exact Host check and does not
+  enable CORS.
+- The ticket is one-time, short-lived and carried in the URL fragment, not a
+  query string. The fragment is removed immediately after the page loads.
+- The session is HttpOnly, SameSite=Strict, memory-backed and expires after
+  one hour. The page cannot read the cookie or access the runtime's local
+  status file.
+- The HTML uses a standard-base64 nonce in a strict Content Security Policy.
+  No remote JavaScript, CSS, fonts, images, CDNs, eval or browser storage are
+  used. Responses are not cached.
+- The current page is read-only. Provider settings, credentials, chat
+  history, memory mutation and runtime controls are not exposed yet.
+
+Provider URL/model configuration may be stored as local non-secret settings in
+a later milestone. API credentials are deliberately postponed and must be
+stored in an OS-backed credential store; a future browser UI may submit a
+secret once but must never read it back or put it in browser persistence.
