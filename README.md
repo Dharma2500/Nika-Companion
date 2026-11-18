@@ -23,7 +23,7 @@ The project is built in small, testable layers. The local agent and persistent m
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
 | Fabric 1.21.11 client mod | Client-only mod v0.5.0; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed Minecraft chat with a configurable server-chat toggle (N); Fabric build CI verified, v1/v2/v3 local persistence verified on Vitaly's Windows machine |
-| Python ↔ Minecraft protocol | Authenticated handshake and one-shot `/nika observe` implemented; strict v1/v2/v3 validation and versioned SQLite event persistence; Python CI verified, v1/v2/v3 local persistence verified on Vitaly's Windows machine |
+| Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private Minecraft chat routing; Python/Fabric CI passed, in-game privacy acceptance remains |
 
 ## Quick start
 
