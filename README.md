@@ -22,8 +22,8 @@ The project is built in small, testable layers. The local agent and persistent m
 | Model provider adapter | Bounded OpenAI-compatible adapter and environment-based configuration implemented; actual LM Studio endpoint/model not yet verified or configured |
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
-| Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed Minecraft chat with a configurable server-chat toggle (N) and fail-closed offline handling; Fabric build CI verified, v1/v2/v3 local persistence verified on Vitaly's Windows machine |
-| Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private Minecraft chat routing with fail-closed offline handling; in-game privacy acceptance remains |
+| Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; v0.5.0 baseline build verified, current v0.5.1 CI runner allocation unresolved; v1/v2/v3 local persistence verified |
+| Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private chat with fail-closed offline handling; v0.5.1 integration test added but current-head CI has not executed it; in-game privacy acceptance remains |
 
 ## Quick start
 
