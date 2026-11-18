@@ -36,10 +36,6 @@ jobs:
       - name: Compile all Python modules
         run: python -m compileall -q agent/src agent/tests
 
-      - name: Show Ruff import fix
-        run: ruff check --diff agent
-        continue-on-error: true
-
       - name: Lint
         run: ruff check agent
 
