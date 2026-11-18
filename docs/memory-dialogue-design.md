@@ -16,7 +16,7 @@ The first dialogue milestone is text-only. Voice, proactive behavior and world-c
 - In private Nika-chat mode, an ordinary chat message is consumed locally and is never sent to the multiplayer server. Nika's response is also displayed locally.
 - In normal server-chat mode, ordinary text is sent to the server as usual.
 - Slash commands remain commands and are never routed as dialogue. The chat interception must not block Minecraft commands or existing `/nika` utility commands.
-- If Nika is not summoned or the local Python bridge is unavailable, ordinary messages must not be silently swallowed. The mod falls back to normal server chat and provides a local status indication.
+- If Nika is not summoned, ordinary messages use normal server chat. If private Nika mode is active but the local Python bridge/provider is unavailable, the message is blocked locally with a clear warning. It must never silently leak to the multiplayer server; Vitaly must press the N toggle to explicitly switch to server chat.
 - The current mode must be visible in the chat UI or a small local status indicator so the player always knows where a message will go.
 
 Implementation hook: Fabric API 1.21.11 `ClientSendMessageEvents.ALLOW_CHAT` can prevent a client chat message from being sent. Commands have a separate `ALLOW_COMMAND` event and command callbacks. The local-mode listener should cancel only ordinary messages while private Nika-chat mode is active. The canceled-message callback then queues the request asynchronously through the bridge.
@@ -146,13 +146,13 @@ Implemented in the current feature branch and released as Fabric v0.5.0:
 - When no provider is configured, the route returns HTTP 503 before persisting the user message. Chat bodies are never written to runtime logs.
 - The bridge advertises `dialogue.chat` only when a provider was explicitly configured at runtime startup.
 - Fabric v0.5.0 intercepts ordinary outgoing chat only in private Nika mode and only when `dialogue.chat` is available. Messages are canceled before server send and replies are displayed locally; slash commands remain on their separate path.
-- Summoning Nika enables private chat. A configurable key binding (default N, visible in Controls) switches to public server chat. If the provider/bridge is unavailable before send, the client falls back to public chat with a local warning. If a request fails after interception, a local error says the text was not sent to the server.
+- Summoning Nika enables private chat. A configurable key binding (default N, visible in Controls) switches to public server chat. If the provider/bridge is unavailable before send, the client blocks the message locally with a warning; it does not send it to the server. Vitaly must explicitly press N to switch to public chat. If a request fails after interception, a local error says the text was not sent to the server.
 - The conversation UUID is local to the current client-world session and resets when the client level changes.
 
 Not implemented or not yet verified:
 - The actual LM Studio endpoint and exact model ID on the PC running the Nika Python runtime have not been checked or configured.
 - Full provider budgets, failover/rotation and automatic mode selection.
-- Manual in-game acceptance of private routing, no server leakage, key binding, slash passthrough, provider-offline fallback and world transitions.
+- Manual in-game acceptance of private routing, no server leakage, key binding, slash passthrough, fail-closed offline behavior and world transitions.
 - Automatic memory extraction, voice and autonomous Minecraft actions.
 
 ## Implementation order
@@ -163,6 +163,6 @@ Not implemented or not yet verified:
 4. [x] Provider interface plus explicit environment configuration and bounded OpenAI-compatible adapter with fake-server tests.
 5. [x] Strict chat request/response schema and authenticated `/bridge/v1/chat` endpoint.
 6. [x] Fabric plain-text private chat routing and local reply rendering.
-7. [ ] Verify manually in Minecraft 1.21.11: private routing/no server leakage, N toggle, slash passthrough, provider-offline fallback, long/repeated messages and world transitions.
+7. [ ] Verify manually in Minecraft 1.21.11: private routing/no server leakage, N toggle, slash passthrough, provider-offline blocking, long/repeated messages and world transitions.
 
 Voice and autonomous actions are explicitly deferred until text dialogue is reliable.
