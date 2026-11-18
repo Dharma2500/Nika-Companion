@@ -128,7 +128,7 @@ Version fields to keep in sync:
 - PR #1 draft: `Nika Companion v0.5.1: private plain-text chat and intelligence foundation`, base `main`.
 - Do not merge automatically. Keep all development on the feature branch.
 - Current intended mod release after fail-closed privacy fix: **v0.5.1**.
-- Current branch head (at latest handoff refresh): `afbd5ff6b043634334f4b3d6bc0f809fe01f7fb0`.
+- Current branch head (at latest handoff refresh): `a9cfd32c71e6e8f9567efe06280d3ee323d12b41`.
 - v0.5.1 code and version fields are in sync: `MOD_VERSION=0.5.1`, `gradle.properties mod_version=0.5.1`, Fabric artifact path `nika-companion-0.5.1.jar`.
 - Fail-closed private chat is implemented in `NikaChatClient.java`: when bridge/provider is unavailable, ordinary message returns `false` and is not sent to the server; local warning instructs Vitaly to press N to switch explicitly to server chat.
 - Added backend test `test_bridge_chat_without_provider_does_not_persist_user_message` in `agent/tests/test_runtime.py`; it expects authenticated `/bridge/v1/chat` to return 503 without persisting the user turn if provider is not configured.
@@ -172,7 +172,7 @@ Visual companion acceptance still required:
 
 ## 8. Next work (priority order)
 
-1. v0.5.1 fail-closed private chat safety patch is implemented; current CI is blocked before runner allocation and must be rerun successfully before JAR delivery.
+1. v0.5.1 fail-closed private chat safety patch is implemented. Restore a working GitHub Actions runner allocation for the private repo/account, then get green Fabric + Python checks for the current head before JAR delivery.
 2. Update PR #1 description and this context file with exact latest commit/run/artifact state.
 3. On Vitaly's PC, configure and verify actual LM Studio URL/model ID using local environment only. Do not ask user to paste API keys.
 4. Manual Minecraft acceptance of private chat and no server leakage, especially provider-offline behavior.
