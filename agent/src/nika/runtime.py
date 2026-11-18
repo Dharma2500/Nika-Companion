@@ -26,6 +26,10 @@ from nika.logging_setup import get_logger, setup_logging
 
 LOGGER = get_logger(__name__)
 
+_WINDOWS_MUTEX_GUARD = threading.Lock()
+_WINDOWS_MUTEX_NAMES: set[str] = set()
+_WINDOWS_MUTEX_HANDLES: dict[int, str] = {}
+
 START_TIMEOUT = 15.0
 STOP_TIMEOUT = 10.0
 
@@ -122,21 +126,35 @@ def _acquire_start_lock(settings: Settings) -> int:
         if not handle:
             raise ctypes.WinError(ctypes.get_last_error())
 
+        with _WINDOWS_MUTEX_GUARD:
+            if mutex_name in _WINDOWS_MUTEX_NAMES:
+                close_handle(handle)
+                raise RuntimeError("Nika is already starting.")
+            _WINDOWS_MUTEX_NAMES.add(mutex_name)
+
         wait_result = wait_for_single_object(handle, 0)
         if wait_result not in (0x00000000, 0x00000080):  # OBJECT_0 or ABANDONED
             winerror = ctypes.get_last_error()
+            with _WINDOWS_MUTEX_GUARD:
+                _WINDOWS_MUTEX_NAMES.discard(mutex_name)
             close_handle(handle)
             if wait_result == 0x00000102:  # WAIT_TIMEOUT
                 raise RuntimeError("Nika is already starting.")
             raise ctypes.WinError(winerror)
 
+        handle_value = int(handle)
         try:
             lock_path.write_text(str(os.getpid()), encoding="ascii")
         except Exception:
             release_mutex(handle)
             close_handle(handle)
+            with _WINDOWS_MUTEX_GUARD:
+                _WINDOWS_MUTEX_NAMES.discard(mutex_name)
             raise
-        return int(handle)
+
+        with _WINDOWS_MUTEX_GUARD:
+            _WINDOWS_MUTEX_HANDLES[handle_value] = mutex_name
+        return handle_value
 
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
@@ -179,6 +197,10 @@ def _release_start_lock(descriptor: int) -> None:
                     "runtime.start_mutex_close_failed",
                     extra={"winerror": ctypes.get_last_error()},
                 )
+            with _WINDOWS_MUTEX_GUARD:
+                mutex_name = _WINDOWS_MUTEX_HANDLES.pop(descriptor, None)
+                if mutex_name is not None:
+                    _WINDOWS_MUTEX_NAMES.discard(mutex_name)
         return
 
     try:
