@@ -5,11 +5,12 @@ The Fabric 1.21.11 client-side component of the Nika-Companion project.
 ## Current milestone
 
 - Client-only Fabric mod entry point
-- Client commands: `/nika status`, `/nika connect`
+- Client commands: `/nika status`, `/nika connect`, `/nika observe`
 - Reproducible Gradle wrapper build
 - GitHub Actions build artifact
 - Authenticated protocol-v1 read-only handshake via `/nika connect`
-- No world observation, chat transfer or world-changing actions yet
+- Explicit one-shot observation via `/nika observe` (dimension, coordinates, health, food and selected item only)
+- No automatic polling, chat transfer, inventory dump or world-changing actions
 
 ## Requirements
 
@@ -48,9 +49,11 @@ Expected status includes:
 
 - Client mod: active
 - Python bridge: not connected
-- World observation: not enabled
+- World observation: manual only; last: not sent
 
 The `/nika connect` command checks the Python runtime through the authenticated
-loopback handshake. Start the Python runtime first. The first protocol version
-only confirms service identity and health; it does not transmit world state,
-chat, or memory.
+loopback handshake. Start the Python runtime first. The `/nika observe` command
+then sends one signed JSON snapshot to the Python runtime. Python validates it
+against `docs/schemas/observation-v1.schema.json` and appends it to the local
+SQLite event journal. Observation is user-triggered, bounded to 8 KiB and
+contains no chat, inventory contents, server address or other players.
