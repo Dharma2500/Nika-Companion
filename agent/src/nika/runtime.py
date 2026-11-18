@@ -23,16 +23,16 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+from nika.context import ContextBuildError, ContextBuilder
 from nika.config import Settings
 from nika.database import Database
-from nika.event_store import EventStore, NewEvent
-from nika.logging_setup import get_logger, setup_logging
-from nika.context import ContextBuildError, ContextBuilder
 from nika.dialogue import (
     MAX_CHAT_REQUEST_BYTES,
     ChatValidationError,
     decode_chat_request,
 )
+from nika.event_store import EventStore, NewEvent
+from nika.logging_setup import get_logger, setup_logging
 from nika.memory import (
     ConversationStore,
     MemoryStore,
