@@ -27,9 +27,9 @@ from nika.config import Settings
 from nika.context import ContextBuildError, ContextBuilder
 from nika.database import Database
 from nika.dialogue import (
+    MAX_CHAT_REQUEST_BYTES,
     ChatValidationError,
     decode_chat_request,
-    MAX_CHAT_REQUEST_BYTES,
 )
 from nika.event_store import EventStore, NewEvent
 from nika.logging_setup import get_logger, setup_logging
@@ -40,16 +40,16 @@ from nika.memory import (
     MessageInput,
 )
 from nika.observation import (
-    decode_observation,
     MAX_OBSERVATION_BYTES,
     ObservationValidationError,
+    decode_observation,
 )
 from nika.provider import (
-    load_provider_config,
     OpenAICompatibleProvider,
     ProviderConfigurationError,
     ProviderError,
     ProviderManager,
+    load_provider_config,
 )
 
 LOGGER = get_logger(__name__)
