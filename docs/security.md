@@ -66,23 +66,26 @@ timestamp, nonce and body hash. Requests outside a 60-second clock window or
 with a previously accepted nonce are rejected. The handshake does not expose
 Minecraft state, durable memory, chat history or world-changing actions.
 
-The observation-v1 JSON Schema is defined at
-`docs/schemas/observation-v1.schema.json`. Its Python validator rejects
-duplicate keys, unknown properties, non-finite numbers, out-of-range values
-and unsupported versions; observation payloads have a stricter 8 KiB limit.
-The only planned fields are client/mod versions, dimension, player coordinates,
-health, food level and selected item identifier. Chat, inventory contents,
-server address, player identity and other players are excluded.
+Observation contracts are versioned in `docs/schemas/`:
+`observation-v1.schema.json`, `observation-v2.schema.json` and
+`observation-v3.schema.json`. The Python validator rejects duplicate JSON
+keys, unknown properties, non-finite numbers, invalid identifiers,
+out-of-range values and unsupported versions. Every observation body is
+limited to 8 KiB. The versions are additive and remain backward compatible:
+v1 contains basic client/world/player context, v2 adds bounded loaded-only
+block-state sampling, and v3 adds the biome, time/weather, local light level,
+game mode and one-shot movement flags described in the architecture document.
 
 The signed `POST /bridge/v1/observe` endpoint accepts only UTF-8 JSON
 bodies up to 8 KiB. HMAC verification covers the exact body hash, path, method,
 timestamp and nonce. The runtime rejects replayed nonces, validates the
-observation against the v1 contract, then persists the normalized payload as
-a local `minecraft.observation.v1` event. The client sends a snapshot only
-when the user runs `/nika observe`; it does not poll automatically.
+observation against its declared version, then persists the normalized payload
+as `minecraft.observation.vN`. The client sends a snapshot only when the user
+runs `/nika observe`; it does not poll automatically.
 
-The observation endpoint does not provide any world-changing operation.
-Chat, inventory contents, server address, player identity and other players
-are not included in the payload. World-changing operations remain disabled
-until capability checks, user approval, an emergency stop and disposable-world
-regression tests are implemented.
+Inventory contents, armor stacks, ender chest contents, block-entity data,
+containers, sign text, NBT, chat, server address, account identity, UUIDs,
+other players and entity lists remain excluded. The observation endpoint does
+not provide any world-changing operation. World-changing operations remain
+disabled until capability checks, user approval, an emergency stop and
+disposable-world regression tests are implemented.
