@@ -14,7 +14,8 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
+from http.cookies import SimpleCookie
 from ctypes import wintypes
 from http.client import HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,7 +26,8 @@ from urllib.request import Request, urlopen
 
 from nika.config import Settings
 from nika.context import ContextBuilder, ContextBuildError
-from nika.database import Database
+from nika.database import SCHEMA_VERSION, Database
+from nika.dashboard import render_dashboard
 from nika.dialogue import (
     MAX_CHAT_REQUEST_BYTES,
     ChatValidationError,
@@ -69,6 +71,10 @@ BRIDGE_MAX_REQUEST_BYTES = 64 * 1024
 BRIDGE_MAX_CLOCK_SKEW_SECONDS = 60
 BRIDGE_NONCE_TTL_SECONDS = 120
 BRIDGE_MAX_TRACKED_NONCES = 4096
+
+DASHBOARD_TICKET_TTL_SECONDS = 60
+DASHBOARD_SESSION_TTL_SECONDS = 3600
+DASHBOARD_MAX_PENDING_TICKETS = 8
 
 
 def create_bridge_signature(
@@ -220,6 +226,37 @@ def get_runtime_status(settings: Settings | None = None) -> dict[str, Any] | Non
     ):
         return None
     return response
+
+
+
+
+def create_dashboard_ticket(settings: Settings | None = None) -> tuple[str, str]:
+    """Create a single-use dashboard ticket through the authenticated local runtime."""
+    settings = settings or Settings.from_env()
+    status = _read_status(settings)
+    if status is None or get_runtime_status(settings) is None:
+        raise RuntimeError("Nika runtime is not running.")
+
+    endpoint = (
+        f"http://127.0.0.1:{status['port']}/dashboard/session/create"
+    )
+    request = Request(
+        endpoint,
+        data=b"",
+        headers={"X-Nika-Token": status["token"]},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=3.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, HTTPException, json.JSONDecodeError, ValueError):
+        raise RuntimeError("Could not create a local dashboard session.") from None
+
+    ticket = payload.get("ticket") if isinstance(payload, dict) else None
+    if not isinstance(ticket, str) or not ticket:
+        raise RuntimeError("The local runtime returned an invalid dashboard ticket.")
+
+    return f"http://127.0.0.1:{status['port']}/dashboard/", ticket
 
 
 def _acquire_start_lock(settings: Settings) -> int:
@@ -633,6 +670,9 @@ def serve(foreground: bool = False) -> None:
         # Keep the local runtime and memory available; never log config values.
         LOGGER.error("runtime.provider_configuration_invalid")
     chat_request_lock = threading.Lock()
+    dashboard_auth_lock = threading.Lock()
+    dashboard_tickets: dict[str, float] = {}
+    dashboard_sessions: dict[str, float] = {}
     stop_event = threading.Event()
     shutdown_complete = threading.Event()
     _console_handler: tuple[Any, Any] | None = None
@@ -641,6 +681,37 @@ def serve(foreground: bool = False) -> None:
         def _authorized(self) -> bool:
             supplied = self.headers.get("X-Nika-Token", "")
             return secrets.compare_digest(supplied, token)
+
+        def _dashboard_expected_host(self) -> str:
+            if server is None:
+                return ""
+            return f"127.0.0.1:{server.server_address[1]}"
+
+        def _dashboard_local_host(self) -> bool:
+            return self.headers.get("Host", "").lower() == self._dashboard_expected_host()
+
+        def _dashboard_origin(self) -> str:
+            return f"http://{self._dashboard_expected_host()}"
+
+        def _dashboard_session_valid(self) -> bool:
+            cookie = SimpleCookie()
+            try:
+                cookie.load(self.headers.get("Cookie", ""))
+            except Exception:
+                return False
+            morsel = cookie.get("nika_dashboard_session")
+            if morsel is None:
+                return False
+
+            now = time.time()
+            with dashboard_auth_lock:
+                expired = [
+                    key for key, expires_at in dashboard_sessions.items()
+                    if expires_at <= now
+                ]
+                for key in expired:
+                    dashboard_sessions.pop(key, None)
+                return morsel.value in dashboard_sessions
 
         def _bridge_authorized(self) -> bool:
             return bridge_authenticator.verify(
@@ -661,6 +732,95 @@ def serve(foreground: bool = False) -> None:
             self.wfile.write(body)
 
         def do_GET(self) -> None:
+            if self.path in {"/dashboard", "/dashboard/"}:
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                nonce = secrets.token_urlsafe(24)
+                body = render_dashboard(nonce)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("X-Frame-Options", "DENY")
+                self.send_header(
+                    "Content-Security-Policy",
+                    "default-src 'none'; "
+                    f"script-src 'nonce-{nonce}'; "
+                    f"style-src 'nonce-{nonce}'; "
+                    "connect-src 'self'; img-src 'none'; "
+                    "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+                )
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if self.path == "/dashboard/api/status":
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                if not self._dashboard_session_valid():
+                    self._send(401, {"error": "dashboard_session_required"})
+                    return
+
+                database_healthy = False
+                counts: dict[str, int | None] = {
+                    "events": None,
+                    "memories": None,
+                    "conversations": None,
+                    "messages": None,
+                }
+                try:
+                    database_healthy = database.health_check()
+                    with closing(database.connect()) as connection:
+                        counts = {
+                            "events": int(
+                                connection.execute("SELECT COUNT(*) FROM event_log").fetchone()[0]
+                            ),
+                            "memories": int(
+                                connection.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+                            ),
+                            "conversations": int(
+                                connection.execute(
+                                    "SELECT COUNT(*) FROM conversations"
+                                ).fetchone()[0]
+                            ),
+                            "messages": int(
+                                connection.execute(
+                                    "SELECT COUNT(*) FROM conversation_messages"
+                                ).fetchone()[0]
+                            ),
+                        }
+                except sqlite3.Error:
+                    LOGGER.warning("runtime.dashboard_database_check_failed")
+
+                started_at = status_data.get("started_at", time.time())
+                self._send(
+                    200,
+                    {
+                        "runtime": "running",
+                        "uptime_seconds": max(0.0, time.time() - float(started_at)),
+                        "database": {
+                            "healthy": database_healthy,
+                            "schema_version": SCHEMA_VERSION,
+                        },
+                        "provider": {"configured": provider_manager.is_available},
+                        "capabilities": [
+                            "health.read",
+                            "observation.submit",
+                            *(
+                                ["dialogue.chat"]
+                                if provider_manager.is_available
+                                else []
+                            ),
+                        ],
+                        "counts": counts,
+                    },
+                )
+                return
+
             if self.path == "/status":
                 if not self._authorized():
                     self._send(403, {"error": "unauthorized"})
@@ -718,6 +878,97 @@ def serve(foreground: bool = False) -> None:
             )
 
         def do_POST(self) -> None:
+            if self.path == "/dashboard/session/create":
+                if not self._dashboard_local_host() or not self._authorized():
+                    self._send(403, {"error": "unauthorized"})
+                    return
+
+                now = time.time()
+                ticket = secrets.token_urlsafe(32)
+                with dashboard_auth_lock:
+                    expired = [
+                        key for key, expires_at in dashboard_tickets.items()
+                        if expires_at <= now
+                    ]
+                    for key in expired:
+                        dashboard_tickets.pop(key, None)
+                    while len(dashboard_tickets) >= DASHBOARD_MAX_PENDING_TICKETS:
+                        oldest = min(dashboard_tickets, key=dashboard_tickets.get)
+                        dashboard_tickets.pop(oldest, None)
+                    dashboard_tickets[ticket] = now + DASHBOARD_TICKET_TTL_SECONDS
+
+                self._send(
+                    201,
+                    {"ticket": ticket, "expires_in": DASHBOARD_TICKET_TTL_SECONDS},
+                )
+                return
+
+            if self.path == "/dashboard/session/exchange":
+                if (
+                    not self._dashboard_local_host()
+                    or self.headers.get("Origin") != self._dashboard_origin()
+                    or self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin"
+                ):
+                    self._send(403, {"error": "same_origin_required"})
+                    return
+
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 4 or int(raw_length) > 4096:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                if self.headers.get("Transfer-Encoding") is not None:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+
+                body = self.rfile.read(int(raw_length))
+                try:
+                    payload = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                if (
+                    not isinstance(payload, dict)
+                    or set(payload) != {"ticket"}
+                    or not isinstance(payload["ticket"], str)
+                    or not 32 <= len(payload["ticket"]) <= 128
+                ):
+                    self._send(400, {"error": "invalid_dashboard_ticket"})
+                    return
+
+                now = time.time()
+                with dashboard_auth_lock:
+                    expiry = dashboard_tickets.pop(payload["ticket"], None)
+                    if expiry is None or expiry <= now:
+                        self._send(403, {"error": "dashboard_ticket_invalid_or_expired"})
+                        return
+                    session = secrets.token_urlsafe(32)
+                    dashboard_sessions[session] = now + DASHBOARD_SESSION_TTL_SECONDS
+
+                response_body = json.dumps({"authenticated": True}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header(
+                    "Set-Cookie",
+                    "nika_dashboard_session="
+                    + session
+                    + "; HttpOnly; SameSite=Strict; Path=/dashboard; Max-Age="
+                    + str(DASHBOARD_SESSION_TTL_SECONDS),
+                )
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(response_body)
+                return
+
             if self.path == BRIDGE_CHAT_PATH:
                 raw_length = self.headers.get("Content-Length", "")
                 if (
