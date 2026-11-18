@@ -140,15 +140,23 @@ protocol shape. This does not mean a real model is configured: the actual
 LM Studio endpoint and model ID must be checked on the PC running the Nika
 runtime before use.
 
-The authenticated chat route and Fabric chat interception are not implemented
-yet. Plain Minecraft text chat routing is designed in
-`docs/memory-dialogue-design.md`: ordinary text is privately routed to Nika
-without a per-message slash command, while a configurable key binding switches
-back to public server chat. Slash commands remain on their separate event path.
-Plain Minecraft text chat routing is designed in
-`docs/memory-dialogue-design.md`: ordinary text is privately routed to Nika
-without a per-message slash command, while a configurable key binding switches
-back to public server chat. Slash commands remain on their separate event path.
+The authenticated `POST /bridge/v1/chat` route is implemented. It
+accepts strict schema v1 with a 16 KiB transport bound and a 4,000-character
+user-message ceiling, reuses HMAC-SHA256/timestamp/nonce protection, and uses
+request IDs for idempotency. User and assistant messages are stored in separate
+transactions; provider calls do not hold SQLite write transactions. When no
+provider is configured, the route returns a truthful error and does not pretend
+that a model response was generated.
+
+Fabric v0.5.0 intercepts ordinary outgoing chat through
+`ClientSendMessageEvents.ALLOW_CHAT` only while Nika's private chat mode is
+enabled and the local bridge advertises `dialogue.chat`. The message is
+canceled before multiplayer server send, forwarded asynchronously to the
+loopback bridge, and the reply is displayed locally. A configurable key binding
+(default N) switches back to public server chat. Slash commands use their
+separate event path and are not intercepted. If the provider is unavailable
+before send, the client falls back to public server chat with a local warning.
+Live Minecraft privacy and input-flow acceptance tests are still required.
 
 ## API degradation
 
