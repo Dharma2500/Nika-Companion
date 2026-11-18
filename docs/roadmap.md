@@ -107,12 +107,17 @@ Design baseline: `docs/memory-dialogue-design.md`.
 
 ## Phase 5: dashboard and voice
 
-- [ ] Local dashboard and status panel
-  - [ ] Serve the UI from the Python runtime on loopback only; no LAN/public listener or third-party CDN assets
-  - [ ] Show runtime, bridge and provider health without exposing control tokens or API credentials
-  - [ ] Edit provider URL/model and test connectivity
-  - [ ] Store API credentials through an OS-backed local secret store; show only configured/not configured
-  - [ ] Add bounded diagnostics and safe runtime controls with explicit confirmation for stop/restart
+- [x] Local read-only dashboard MVP
+  - [x] Serve the UI from the Python runtime on loopback only; no LAN/public listener or third-party assets
+  - [x] Show runtime uptime, SQLite health/schema/counts, provider configured state and advertised capabilities
+  - [x] Use a 60-second single-use bootstrap ticket and one-hour HttpOnly/SameSite session cookie
+  - [x] Validate Host/Origin, use a nonce-based CSP, and return no runtime/bridge/API secrets to the page
+  - [x] Add CLI command 'nika dashboard'; start the runtime when needed and launch the browser
+  - [x] Cover unauthenticated access, same-origin exchange, ticket replay, redacted status and CLI launch with tests
+- [ ] Verify the dashboard launch and visual layout manually on Vitaly's Windows machine
+- [ ] Add non-secret provider URL/model settings and a connection test
+- [ ] Add API credential storage near the end of the dashboard work, using an OS-backed local secret store; never expose secret values to browser JavaScript
+- [ ] Add bounded diagnostics and safe runtime controls with explicit confirmation for stop/restart
 - [ ] Memory review and correction tools
 - [ ] Voice input/output (only after text dialogue and memory pass acceptance)
 - [ ] Context-aware initiative controls
