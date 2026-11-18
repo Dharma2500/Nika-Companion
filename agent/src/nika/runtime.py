@@ -667,7 +667,7 @@ def serve(foreground: bool = False) -> None:
                     "state": "running",
                     "pid": os.getpid(),
                     "version": "0.1.0",
-                    "capabilities": ["health.read"],
+                    "capabilities": ["health.read", "observation.submit"],
                 },
             )
 
