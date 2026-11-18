@@ -22,7 +22,7 @@ The project is built in small, testable layers. The local agent and persistent m
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
 | Fabric 1.21.11 client mod | Client-only mod; `/nika status` and authenticated read-only bridge v1 `/nika connect`; CI and local Windows handshake verified |
-| Python ↔ Minecraft protocol | Authenticated loopback read-only handshake v1 implemented and locally verified; world observation remains disabled |
+| Python ↔ Minecraft protocol | Authenticated loopback handshake v1 verified; observation-v1 JSON Schema and strict Python validator implemented; live observation remains disabled |
 | Dashboard, voice, external AI | Planned, not required for local core |
 
 ## Quick start
