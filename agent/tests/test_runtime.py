@@ -450,7 +450,7 @@ def test_bridge_v1_handshake_is_authenticated_and_replay_protected(
         assert payload["protocol_version"] == 1
         assert payload["state"] == "running"
         assert payload["pid"] == status["pid"]
-        assert payload["capabilities"] == ["health.read"]
+        assert payload["capabilities"] == ["health.read", "observation.submit"]
 
         replay = _signed_bridge_request(status, timestamp=timestamp, nonce=nonce)
         with pytest.raises(HTTPError) as error:
