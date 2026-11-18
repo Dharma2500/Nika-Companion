@@ -82,8 +82,9 @@ Design baseline: `docs/memory-dialogue-design.md`.
 - [x] Typed MemoryStore API: add/get/search/list with confidence, provenance and scope validation
 - [x] Deterministic ContextBuilder: personality, recent turns, relevant memories and hard context budget (world context intentionally omitted until freshness/scope checks exist)
 - [ ] Stable Nika personality constitution and truthful fallback behavior
-- [ ] Provider manager with budgets, timeouts, model selection and graceful degradation
-- [ ] Verify an OpenAI-compatible local LM Studio endpoint on the actual Nika machine before configuring it
+- [x] Provider interface and OpenAI-compatible adapter with explicit environment configuration, timeouts, response bounds and fake-server tests
+- [ ] Verify an OpenAI-compatible local LM Studio endpoint and actual model ID on the PC running the Nika runtime
+- [ ] Complete provider manager with budgets, failover/rotation, diagnostics and graceful degradation
 - [ ] Authenticated `POST /bridge/v1/chat` endpoint with strict schema, payload limits, HMAC and replay protection
 - [ ] Plain-text Minecraft chat routing: no `/nika ask`, no per-message prefix
   - [ ] Local Nika-chat mode enabled when the companion is summoned
