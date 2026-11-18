@@ -12,6 +12,7 @@ def test_default_data_directory_is_outside_repository(monkeypatch, tmp_path: Pat
     settings = Settings.from_env()
     assert settings.data_dir == (tmp_path / "NIKA_DATA").resolve()
     assert settings.database_path == settings.data_dir / "nika.sqlite3"
+    assert settings.learning_path == settings.data_dir / "learning"
 
 
 def test_custom_paths_are_resolved(monkeypatch, tmp_path: Path) -> None:
@@ -22,6 +23,7 @@ def test_custom_paths_are_resolved(monkeypatch, tmp_path: Path) -> None:
     settings = Settings.from_env()
     assert settings.data_dir == data_dir.resolve()
     assert settings.database_path == database_path.resolve()
+    assert settings.learning_path == data_dir.resolve() / "learning"
 
 
 @pytest.mark.parametrize("variable", ["NIKA_DATA", "NIKA_DATABASE_PATH"])
@@ -108,5 +110,41 @@ def test_service_directory_must_not_be_a_file(tmp_path: Path) -> None:
 
     assert any(
         item.severity == "ERROR" and "Logs directory" in item.message
+        for item in findings
+    )
+
+
+
+def test_custom_learning_directory_is_resolved(monkeypatch, tmp_path: Path) -> None:
+    learning_dir = tmp_path / "training-assets"
+    monkeypatch.setenv("NIKA_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("NIKA_LEARNING_DIR", str(learning_dir))
+
+    settings = Settings.from_env()
+
+    assert settings.learning_path == learning_dir.resolve()
+
+
+def test_empty_learning_directory_environment_variable_is_rejected(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("NIKA_LEARNING_DIR", " ")
+    with pytest.raises(ConfigurationError, match="NIKA_LEARNING_DIR"):
+        Settings.from_env()
+
+
+def test_external_learning_directory_produces_storage_location_warning(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        database_path=tmp_path / "data" / "nika.sqlite3",
+        learning_dir=tmp_path / "large-models",
+    )
+
+    findings = diagnose_settings(settings)
+
+    assert any(
+        item.severity == "WARNING" and "Learning data is outside NIKA_DATA" in item.message
         for item in findings
     )
