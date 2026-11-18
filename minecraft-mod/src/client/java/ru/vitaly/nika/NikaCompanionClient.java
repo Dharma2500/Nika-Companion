@@ -50,6 +50,20 @@ public final class NikaCompanionClient implements ClientModInitializer {
                     context.getSource().sendFeedback(Component.literal("Ника: я рядом."));
                     return 1;
                 })
+                .then(ClientCommandManager.literal("dismiss")
+                    .executes(context -> {
+                        CompanionRenderer.dismiss();
+                        context.getSource().sendFeedback(Component.literal("Ника: я отойду."));
+                        return 1;
+                    }))
+                .then(ClientCommandManager.literal("уйди")
+                    .executes(context -> {
+                        CompanionRenderer.dismiss();
+                        context.getSource().sendFeedback(
+                            Component.literal("Ника: хорошо, позови меня, когда понадоблюсь.")
+                        );
+                        return 1;
+                    }))
                 .then(ClientCommandManager.literal("status")
                     .executes(context -> {
                         String status = """
