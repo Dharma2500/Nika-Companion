@@ -91,9 +91,9 @@ Design baseline: `docs/memory-dialogue-design.md`.
   - [x] Configurable key binding (default N) to toggle private Nika chat vs public server chat
   - [x] Ordinary messages are intercepted whenever private mode is active; sent only to the local bridge when `dialogue.chat` is available, otherwise blocked locally
   - [x] Slash commands and existing client commands remain unaffected
-  - [x] Show routing state; when bridge/provider is unavailable in private mode, fall back to public server chat with a local warning
+  - [x] Show routing state; when bridge/provider is unavailable in private mode, block ordinary text locally and show a warning; public server chat requires an explicit N toggle
   - [x] Display user echo and assistant replies only in the local client chat
-- [ ] Verify in Minecraft 1.21.11: private message/reply never reaches server, N toggle works, slash passthrough, provider-offline public fallback warning and chat-mode behavior during world transitions
+- [ ] Verify in Minecraft 1.21.11: private message/reply never reaches server, N toggle works, slash passthrough, provider-offline local blocking and explicit public switch, repeated messages and chat-mode behavior during world transitions
 - [ ] Explicit memory teaching/review flow; no silent automatic promotion of every model statement
 - [ ] Versioned skill format and user demonstration capture
 
@@ -108,6 +108,11 @@ Design baseline: `docs/memory-dialogue-design.md`.
 ## Phase 5: dashboard and voice
 
 - [ ] Local dashboard and status panel
+  - [ ] Serve the UI from the Python runtime on loopback only; no LAN/public listener or third-party CDN assets
+  - [ ] Show runtime, bridge and provider health without exposing control tokens or API credentials
+  - [ ] Edit provider URL/model and test connectivity
+  - [ ] Store API credentials through an OS-backed local secret store; show only configured/not configured
+  - [ ] Add bounded diagnostics and safe runtime controls with explicit confirmation for stop/restart
 - [ ] Memory review and correction tools
 - [ ] Voice input/output (only after text dialogue and memory pass acceptance)
 - [ ] Context-aware initiative controls
