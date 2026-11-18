@@ -90,3 +90,14 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Important limitation: this is not a forensic scan of all 159 PR commits, all branches or historical Actions logs. These become visible when the repo is public. Any credential found in history must be revoked/rotated, not merely deleted.
 - GitHub UI path: Settings → General → Danger Zone → Change repository visibility → Make public. Verify the exact repository name before confirming.
 - Next: verify actual public visibility, review Actions history/logs, enable available secret-scanning/push-protection settings, then re-check Actions and continue development. PR #1 remains draft/open/unmerged.
+
+
+## 2026-11-19: public repository, CI recovery and v0.5.1 artifact
+
+- Verified repository visibility is now public. Branches remain `main` and `feature/companion-renderer-v0.4.0`; PR #1 is still open/draft/unmerged.
+- Reran the previously runner-blocked workflows: Fabric run #130 (44419018875) passed the JDK 21/Gradle build and artifact upload. Python CI run #346 (44419018898) passed all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs; all six ran 157 tests each with compileall and Ruff passing. The dependent source-overlay archive job also passed.
+- Downloaded and verified Fabric v0.5.1 artifact ID 14481446390. JAR: `nika-companion-0.5.1.jar`, 31,822 bytes, SHA-256 `d1793fbe8e41a9c0d183b156dc28733ee042f0ec83d5e4e8b8285075e513334d`. GitHub artifact expires 2026-12-02 23:18 UTC.
+- Targeted inspection of current ignore rules/provider config/security docs/workflows found no configured credentials and confirmed local-data ignore rules, read-only workflow permissions and standard hosted runners. This is not a complete forensic scan of all historical blobs/commits/logs. Do not claim the entire public history is secret-free without a full scan.
+- Corrected stale project docs: README no longer calls the public repository itself private and now reports current CI/artifact status; roadmap now correctly says offline private messages are blocked locally, never silently forwarded to public server chat. Dashboard roadmap now records loopback-only UI, status, provider settings and OS-backed credential storage.
+- Canonical handoff updated with current public visibility, CI/artifact evidence, honest secret-audit limitations, remaining manual Minecraft acceptance and dashboard as the next milestone.
+- No source-code changes in this recovery turn. No token/API key has been added to Git.
