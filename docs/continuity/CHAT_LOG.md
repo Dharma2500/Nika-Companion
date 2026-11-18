@@ -38,3 +38,14 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Current validation at branch head `577d9450b7f1334959304f79fb2c78b57826fd09`: Python CI 44408464677 passed all six Python/OS matrix jobs and source overlay; Fabric build 44408464712 passed.
 - No new JAR is produced for this milestone because the Fabric client code did not change.
 - Next: provider-independent OpenAI-compatible adapter with explicit configuration and fake-server tests; then authenticated chat route; then Fabric private unprefixed text chat. Verify the actual LM Studio host/model on the Nika runtime PC before setting values.
+
+## 2026-11-19: OpenAI-compatible provider adapter
+
+- Added `agent/src/nika/provider.py` with `ProviderConfig`, `load_provider_config`, `OpenAICompatibleProvider` and `ProviderManager`.
+- Configuration is explicit and local-only: `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL`, optional `NIKA_LLM_API_KEY`. No endpoint/model/key is hard-coded.
+- Uses Python standard library HTTP client and standard `/chat/completions`; no third-party runtime dependency.
+- Enforces URL validation, 1–120 sec timeout, 32 KiB request, 64 KiB response, 12,000-character reply limit, token/temperature bounds and sanitized errors. No prompts, model responses or keys are logged.
+- Added fake-local-server tests for config, request shape, successful response parsing, HTTP failure sanitization, oversized response and honest no-provider status.
+- CI for code commit `87fec3ecb9fd580b0f96e3c689962d6515a70c2e`: Python CI 44409119993 successful across Python 3.11/3.12/3.13 on Ubuntu and Windows; lint/tests/source overlay successful. Fabric build 44409120014 successful.
+- No new JAR was built or sent because Fabric client code did not change.
+- Real LM Studio connection is not yet tested. Next: verify actual host and model ID on the PC running Nika, then configure local environment variables, implement authenticated `POST /bridge/v1/chat`, and finally route ordinary unprefixed Minecraft chat privately to Nika with a keybind back to public server chat. Slash commands must remain untouched.
