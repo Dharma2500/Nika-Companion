@@ -27,7 +27,7 @@ import java.util.Map;
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
-    private static final String MOD_VERSION = "0.3.0";
+    private static final String MOD_VERSION = "0.4.0";
     private static final int OBSERVATION_SCHEMA_VERSION = 3;
     private static final int BLOCK_SAMPLE_RADIUS_XZ = 2;
     private static final int BLOCK_SAMPLE_RADIUS_Y = 1;
@@ -37,6 +37,8 @@ public final class NikaCompanionClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        CompanionRenderer.initialize();
+
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
             dispatcher.register(ClientCommandManager.literal("nika")
                 .executes(context -> {
@@ -53,11 +55,13 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             Client mod: active
                             Python bridge: %s
                             World observation: manual (/nika observe), last: %s
+                            Local companion: %s
                             """.formatted(
                                 MOD_VERSION,
                                 MINECRAFT_VERSION,
                                 BridgeClient.getLastStatus(),
-                                BridgeClient.getLastObservationStatus()
+                                BridgeClient.getLastObservationStatus(),
+                                CompanionRenderer.isEnabled() ? "enabled" : "disabled"
                             );
                         context.getSource().sendFeedback(Component.literal(status));
                         return 1;
@@ -171,6 +175,31 @@ public final class NikaCompanionClient implements ClientModInitializer {
                         );
                         return 1;
                     }))
+                .then(ClientCommandManager.literal("companion")
+                    .executes(context -> {
+                        context.getSource().sendFeedback(Component.literal(
+                            "Nika companion is " + (CompanionRenderer.isEnabled() ? "on" : "off")
+                                + ". Use /nika companion on or /nika companion off."
+                        ));
+                        return 1;
+                    })
+                    .then(ClientCommandManager.literal("on")
+                        .executes(context -> {
+                            CompanionRenderer.setEnabled(true);
+                            context.getSource().sendFeedback(
+                                Component.literal("Nika: companion enabled for this client.")
+                            );
+                            return 1;
+                        }))
+                    .then(ClientCommandManager.literal("off")
+                        .executes(context -> {
+                            CompanionRenderer.setEnabled(false);
+                            context.getSource().sendFeedback(
+                                Component.literal("Nika: companion disabled for this client.")
+                            );
+                            return 1;
+                        }))
+                )
             )
         );
 
