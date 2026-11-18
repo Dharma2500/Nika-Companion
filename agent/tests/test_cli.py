@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from nika import cli
 from nika.backup import BackupManager
 from nika.config import Settings
@@ -92,3 +94,23 @@ def test_doctor_reports_external_database_location_warning(
     assert "WARNING:" in output
     assert "outside NIKA_DATA" in output
     assert "SQLite integrity: OK" in output
+
+
+
+def test_cli_rejects_invalid_configuration_before_creating_logs(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    data_path = tmp_path / "data-is-a-file"
+    data_path.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setenv("NIKA_DATA", str(data_path))
+    monkeypatch.delenv("NIKA_DATABASE_PATH", raising=False)
+    monkeypatch.setattr("sys.argv", ["nika", "doctor"])
+
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+
+    assert error.value.code == 2
+    assert "Nika configuration: ERROR" in capsys.readouterr().out
+    assert not (tmp_path / "data-is-a-file" / "logs").exists()
