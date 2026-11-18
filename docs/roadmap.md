@@ -23,7 +23,7 @@ Work proceeds by verified milestones. A milestone is not complete until its test
   - [x] Stage and atomically replace the database
   - [x] Automatic rollback tests for failed replacement and post-install validation
   - [x] Runtime shutdown guard and end-to-end CLI restore test
-  - [ ] Perform a manual restore exercise with a disposable Windows data directory
+  - [x] Perform a manual restore exercise with a disposable Windows data directory
 - [x] Structured JSONL logging with secret redaction and rotation
 - [x] Verify secret redaction in messages, structured fields and tracebacks
 - [x] Verify CLI and runtime logs use separate process-owned files
