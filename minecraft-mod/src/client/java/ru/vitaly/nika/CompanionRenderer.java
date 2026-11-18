@@ -33,9 +33,9 @@ final class CompanionRenderer {
     // Critically damped follow in real-time units (blocks/second).
     // Nika changes pace in slow, smooth phases instead of keeping a fixed speed.
     private static final double FOLLOW_SMOOTH_TIME = 0.38;
-    private static final double FOLLOW_SPEED_MIN = 3.6;
-    private static final double FOLLOW_SPEED_MAX = 7.0;
-    private static final double FOLLOW_SPEED_BASE = 5.2;
+    private static final double FOLLOW_SPEED_MIN = 3.0;
+    private static final double FOLLOW_SPEED_MAX = 7.2;
+    private static final double FOLLOW_SPEED_BASE = 5.1;
     private static final double FOLLOW_PACE_RESPONSE_MOVING = 0.035;
     private static final double FOLLOW_PACE_RESPONSE_IDLE = 0.06;
     private static final int FOLLOW_PACE_MIN_DELAY = 45;
@@ -138,9 +138,11 @@ final class CompanionRenderer {
         }
 
         previousPlayerPosition = playerPosition;
-        wasMoving = moving;
 
+        // Preserve the previous movement state so pace can reset only once
+        // when Nika transitions from following to idle.
         updateFollowPace(gameTime, moving);
+        wasMoving = moving;
         updateFollowMotion();
 
         // Keep previous body/head angles for vanilla render-state interpolation.
@@ -251,11 +253,13 @@ final class CompanionRenderer {
      */
     private static void updateFollowPace(long gameTime, boolean moving) {
         if (moving && gameTime >= nextFollowPaceTick) {
+            // Some phases are deliberately slower than walking speed, while
+            // others are quick enough to let Nika catch up during a sprint.
             targetFollowSpeed = FOLLOW_SPEED_MIN
                 + RANDOM.nextDouble() * (FOLLOW_SPEED_MAX - FOLLOW_SPEED_MIN);
             nextFollowPaceTick = gameTime
                 + randomDelay(FOLLOW_PACE_MIN_DELAY, FOLLOW_PACE_MAX_DELAY);
-        } else if (!moving) {
+        } else if (!moving && wasMoving) {
             targetFollowSpeed = FOLLOW_SPEED_BASE;
             nextFollowPaceTick = gameTime
                 + randomDelay(FOLLOW_PACE_MIN_DELAY, FOLLOW_PACE_MAX_DELAY);
