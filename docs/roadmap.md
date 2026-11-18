@@ -77,10 +77,10 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 
 Design baseline: `docs/memory-dialogue-design.md`.
 
-- [ ] Database schema migration v2: conversations, conversation messages, memory provenance and world scope
-- [ ] Typed ConversationStore API with idempotent message writes
-- [ ] Typed MemoryStore API: add/get/search/list with confidence, provenance and scope validation
-- [ ] Deterministic ContextBuilder: personality, recent turns, relevant memories and only fresh world context
+- [x] Database schema migration v2: conversations, conversation messages, memory provenance and world scope (v1 records preserved)
+- [x] Typed ConversationStore API with idempotent message writes
+- [x] Typed MemoryStore API: add/get/search/list with confidence, provenance and scope validation
+- [x] Deterministic ContextBuilder: personality, recent turns, relevant memories and hard context budget (world context intentionally omitted until freshness/scope checks exist)
 - [ ] Stable Nika personality constitution and truthful fallback behavior
 - [ ] Provider manager with budgets, timeouts, model selection and graceful degradation
 - [ ] Verify an OpenAI-compatible local LM Studio endpoint on the actual Nika machine before configuring it
