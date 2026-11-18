@@ -55,7 +55,7 @@ final class NikaChatClient {
         }
         return BridgeClient.isChatAvailable()
             ? "private Nika chat"
-            : "private requested; public fallback (bridge/model unavailable)";
+            : "private Nika chat (offline; messages blocked locally)";
     }
 
     private static void tick(Minecraft client) {
@@ -86,7 +86,7 @@ final class NikaChatClient {
                     showLocal(
                         client,
                         "Ника: приватный режим включён, но bridge/модель недоступны. "
-                            + "Пока сообщения будут отправляться в чат сервера."
+                            + "Сообщения не будут отправлены. Нажми N, чтобы включить чат сервера."
                     );
                 }
             } else {
@@ -114,9 +114,10 @@ final class NikaChatClient {
         if (!BridgeClient.isChatAvailable()) {
             client.execute(() -> showLocal(
                 client,
-                "Ника пока недоступна. Сообщение отправлено в обычный чат сервера."
+                "Ника пока недоступна. Сообщение не отправлено. "
+                    + "Нажми N, чтобы явно переключиться на чат сервера."
             ));
-            return true;
+            return false;
         }
 
         String text = message.strip();
