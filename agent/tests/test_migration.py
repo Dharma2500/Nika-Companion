@@ -62,6 +62,18 @@ def test_migration_copies_and_verifies_data_without_deleting_source(
     assert (migrated / "logs" / "cli.jsonl").is_file()
     assert (migrated / "backups" / "existing-backup.sqlite3").read_bytes() == b"backup marker"
     assert (migrated / "learning" / "datasets" / "examples.jsonl").is_file()
+    assert all(
+        (migrated / "learning" / folder).is_dir()
+        for folder in (
+            "datasets",
+            "base-models",
+            "adapters",
+            "checkpoints",
+            "runs",
+            "cache",
+            "exports",
+        )
+    )
     assert (migrated / "runtime").is_dir()
     assert not (migrated / "runtime" / "status.json").exists()
     manifest = json.loads((migrated / "migration-manifest.json").read_text(encoding="utf-8"))
@@ -107,3 +119,18 @@ def test_migration_requires_database_inside_data_directory(
 
     with pytest.raises(RuntimeError, match="outside NIKA_DATA"):
         migrate_data_directory(external_settings, tmp_path / "new-data")
+
+
+
+def test_migration_refuses_external_learning_directory(
+    tmp_path: Path,
+) -> None:
+    settings, _ = _make_data_directory(tmp_path)
+    settings_with_external_learning = Settings(
+        data_dir=settings.data_dir,
+        database_path=settings.database_path,
+        learning_dir=tmp_path / "external-learning",
+    )
+
+    with pytest.raises(RuntimeError, match="NIKA_LEARNING_DIR is outside NIKA_DATA"):
+        migrate_data_directory(settings_with_external_learning, tmp_path / "new-data")
