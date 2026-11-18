@@ -74,3 +74,10 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Current blocker is runner allocation. Account billing/usage/budget and repository Actions settings must be checked by Vitaly; billing exhaustion is only a hypothesis until verified.
 - Found that this file's sibling PROJECT_CONTEXT.md was an outdated v0.5.0 snapshot with contradictory public-chat fallback behavior. Consolidated the canonical handoff in docs/CHAT_CONTEXT.md and replaced the duplicate with a pointer.
 - Next: inspect GitHub Billing & licensing → Usage / Budgets and alerts, then repository Settings → Actions → General; restore runner allocation; run current-head Fabric and Python checks; deliver only a verified v0.5.1 JAR; configure local LM Studio and complete manual Minecraft privacy acceptance. Do not merge PR #1 without explicit approval.
+## 2026-11-19: handoff consolidation committed
+
+- Updated docs/CHAT_CONTEXT.md with the latest live repository/CI re-check and exact next actions.
+- Replaced docs/continuity/PROJECT_CONTEXT.md with a clear pointer to the canonical handoff; this removes a dangerous stale v0.5.0 description that told Nika to fall back to public chat when offline.
+- Added a canonical handoff link to README.md.
+- Updated PR #1 description with the latest observed workflow run IDs 44416364837 and 44416364976. Latest inspected jobs have no steps/logs/artifacts; v0.5.1 is still not CI-verified.
+- Documentation commits: 02ea7b6cbd571a9249df3963f93351a1ac0e83f9 (handoff), 67df949de0d36539cd8587c32c8888fce39e2f27 (stale context pointer), 54f616a32685e6c090ef619d6f30a8fe1449afab (chat log), ceeaa7fcc66cc80a2d577fe7311527394dcd7ac9 (README link). No source code changed.
