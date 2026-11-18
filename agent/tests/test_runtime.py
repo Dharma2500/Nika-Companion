@@ -55,7 +55,6 @@ def test_foreground_runtime_refuses_to_replace_running_instance(
         runtime.serve(foreground=True)
 
 
-
 def test_runtime_recovers_after_ungraceful_process_exit(tmp_path: Path) -> None:
     data_dir = tmp_path / f"nika-data-{uuid.uuid4().hex}"
     settings = Settings(data_dir=data_dir, database_path=data_dir / "nika.sqlite3")
@@ -206,8 +205,6 @@ def test_runtime_status_rejects_a_different_responder_pid(
     )
 
     assert get_runtime_status(settings) is None
-
-
 
 
 def test_request_handles_truncated_http_response(
@@ -382,8 +379,6 @@ def _sample_observation_payload() -> dict[str, object]:
             "selected_item": "minecraft:diamond_pickaxe",
         },
     }
-
-
 
 
 def test_bridge_chat_without_provider_does_not_persist_user_message(
