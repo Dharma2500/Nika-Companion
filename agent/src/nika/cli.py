@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
+import webbrowser
 from pathlib import Path
 
 from nika.backup import BackupManager
@@ -12,6 +13,7 @@ from nika.database import Database
 from nika.logging_setup import get_logger, setup_logging
 from nika.migration import migrate_data_directory
 from nika.runtime import (
+    create_dashboard_ticket,
     get_runtime_status,
     runtime_maintenance_lock,
     serve,
@@ -225,6 +227,35 @@ def run_stop() -> int:
     return 1
 
 
+
+def run_dashboard() -> int:
+    """Open the authenticated loopback dashboard in the user's browser."""
+    settings = Settings.from_env()
+    try:
+        if get_runtime_status(settings) is None:
+            start_runtime(settings)
+        dashboard_url, ticket = create_dashboard_ticket(settings)
+        opened = webbrowser.open(
+            f"{dashboard_url}#ticket={ticket}",
+            new=2,
+        )
+    except (OSError, RuntimeError) as error:
+        LOGGER.exception("dashboard.open_failed")
+        print(f"Nika dashboard: ERROR ({error})")
+        return 1
+
+    if not opened:
+        print("Nika dashboard: браузер не удалось открыть автоматически.")
+        print("Проверь браузер и повтори команду: nika dashboard")
+        return 1
+
+    print("Nika dashboard: открыта локальная панель.")
+    print(f"Адрес: {dashboard_url}")
+    print("Ссылка входа одноразовая; токены не сохраняются в браузере.")
+    return 0
+
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="nika")
     subparsers = parser.add_subparsers(dest="command")
@@ -258,6 +289,7 @@ def main() -> None:
     subparsers.add_parser("foreground", help="run Nika in this console; closing it stops Nika")
     subparsers.add_parser("status", help="show local runtime status")
     subparsers.add_parser("stop", help="gracefully stop the local Nika runtime")
+    subparsers.add_parser("dashboard", help="open the local Nika dashboard in a browser")
 
     args = parser.parse_args()
     try:
@@ -285,6 +317,7 @@ def main() -> None:
         "foreground": run_foreground,
         "status": run_status,
         "stop": run_stop,
+        "dashboard": run_dashboard,
     }
     if args.command == "backup-verify":
         raise SystemExit(run_backup_verify(args.path))
