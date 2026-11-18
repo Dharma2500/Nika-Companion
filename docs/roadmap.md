@@ -43,7 +43,7 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 
 ## Phase 2: Minecraft client integration
 
-- [ ] Fabric 1.21.11 client mod skeleton and reproducible JAR build
+- [x] Fabric 1.21.11 client mod skeleton and reproducible JAR build (CI verified on JDK 21)
 - [ ] Versioned localhost protocol
 - [ ] Bridge authentication, payload validation and replay protection
 - [ ] Client-only companion renderer
