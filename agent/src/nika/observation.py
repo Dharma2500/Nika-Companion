@@ -7,8 +7,8 @@ import math
 import re
 from typing import Any
 
-OBSERVATION_SCHEMA_VERSION = 2
-SUPPORTED_OBSERVATION_SCHEMA_VERSIONS = frozenset({1, 2})
+OBSERVATION_SCHEMA_VERSION = 3
+SUPPORTED_OBSERVATION_SCHEMA_VERSIONS = frozenset({1, 2, 3})
 MAX_OBSERVATION_BYTES = 8 * 1024
 MAX_BLOCK_SAMPLE_BLOCKS = 32
 MAX_BLOCK_PROPERTIES = 12
@@ -25,6 +25,7 @@ _TOP_LEVEL_KEYS_V2 = {"schema_version", "client", "world", "player"}
 _CLIENT_KEYS = {"minecraft_version", "mod_version"}
 _WORLD_KEYS_V1 = {"dimension"}
 _WORLD_KEYS_V2 = {"dimension", "block_sample"}
+_WORLD_KEYS_V3 = {"dimension", "block_sample", "environment"}
 _PLAYER_KEYS = {
     "x",
     "y",
@@ -33,6 +34,7 @@ _PLAYER_KEYS = {
     "food_level",
     "selected_item",
 }
+_PLAYER_KEYS_V3 = _PLAYER_KEYS | {"state"}
 
 
 class ObservationValidationError(ValueError):
@@ -317,6 +319,99 @@ def _validate_v2(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _require_boolean(value: Any, name: str) -> bool:
+    if type(value) is not bool:
+        raise ObservationValidationError(f"{name} must be a boolean.")
+    return value
+
+
+def _validate_environment(value: Any) -> dict[str, Any]:
+    environment = _require_object(
+        value,
+        "world.environment",
+        {"biome", "time_of_day_ticks", "raining", "thundering", "light_level"},
+    )
+    return {
+        "biome": _require_resource_location(
+            environment["biome"], "world.environment.biome"
+        ),
+        "time_of_day_ticks": _require_integer(
+            environment["time_of_day_ticks"],
+            "world.environment.time_of_day_ticks",
+            0,
+            23_999,
+        ),
+        "raining": _require_boolean(
+            environment["raining"], "world.environment.raining"
+        ),
+        "thundering": _require_boolean(
+            environment["thundering"], "world.environment.thundering"
+        ),
+        "light_level": _require_integer(
+            environment["light_level"], "world.environment.light_level", 0, 15
+        ),
+    }
+
+
+def _validate_player_state(value: Any) -> dict[str, Any]:
+    state = _require_object(
+        value,
+        "player.state",
+        {"game_mode", "on_ground", "sprinting", "swimming", "crouching"},
+    )
+    game_mode = state["game_mode"]
+    if not isinstance(game_mode, str) or game_mode not in {
+        "survival",
+        "creative",
+        "adventure",
+        "spectator",
+    }:
+        raise ObservationValidationError(
+            "player.state.game_mode must be a supported Minecraft game mode."
+        )
+    return {
+        "game_mode": game_mode,
+        "on_ground": _require_boolean(
+            state["on_ground"], "player.state.on_ground"
+        ),
+        "sprinting": _require_boolean(
+            state["sprinting"], "player.state.sprinting"
+        ),
+        "swimming": _require_boolean(
+            state["swimming"], "player.state.swimming"
+        ),
+        "crouching": _require_boolean(
+            state["crouching"], "player.state.crouching"
+        ),
+    }
+
+
+def _validate_v3(payload: dict[str, Any]) -> dict[str, Any]:
+    _require_object(payload, "observation", _TOP_LEVEL_KEYS_V1)
+    client = _validate_client(payload["client"])
+    world = _require_object(payload["world"], "world", _WORLD_KEYS_V3)
+    dimension = _require_resource_location(world["dimension"], "world.dimension")
+    block_sample = _validate_block_sample(world["block_sample"])
+    environment = _validate_environment(world["environment"])
+
+    player_raw = _require_object(payload["player"], "player", _PLAYER_KEYS_V3)
+    player = _validate_player(
+        {key: player_raw[key] for key in _PLAYER_KEYS}
+    )
+    player["state"] = _validate_player_state(player_raw["state"])
+
+    return {
+        "schema_version": 3,
+        "client": client,
+        "world": {
+            "dimension": dimension,
+            "block_sample": block_sample,
+            "environment": environment,
+        },
+        "player": player,
+    }
+
+
 def validate_observation(value: Any) -> dict[str, Any]:
     """Validate and return a normalized copy of a supported Minecraft observation."""
     if not isinstance(value, dict):
@@ -328,4 +423,6 @@ def validate_observation(value: Any) -> dict[str, Any]:
         return _validate_v1(value)
     if schema_version == 2:
         return _validate_v2(value)
+    if schema_version == 3:
+        return _validate_v3(value)
     raise ObservationValidationError("Unsupported observation schema version.")
