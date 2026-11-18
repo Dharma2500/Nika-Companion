@@ -224,3 +224,38 @@ def test_restore_rolls_back_when_atomic_swap_fails(
     assert _event_rows(database) == ["before-backup", "keep-after-failure"]
     safety_root = tmp_path / "backups" / "restore-safety"
     assert len(list(safety_root.glob("pre-restore-*"))) == 1
+
+
+
+def test_restore_rolls_back_after_post_install_validation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    database = Database(tmp_path / "nika.sqlite3")
+    database.initialize()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("original", "2026-01-01T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+    manager = BackupManager(database, tmp_path / "backups")
+    backup_path = manager.create_backup()
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO event_log VALUES (?, ?, ?, ?, ?)",
+            ("later", "2026-01-02T00:00:00+00:00", "test", "pytest", "{}"),
+        )
+
+    real_verify = manager.verify_backup
+
+    def fail_installed_database(path: Path) -> bool:
+        if Path(path).resolve() == database.path.resolve():
+            return False
+        return real_verify(path)
+
+    monkeypatch.setattr(manager, "verify_backup", fail_installed_database)
+
+    with pytest.raises(sqlite3.DatabaseError, match="post-install"):
+        manager.restore_backup(backup_path)
+
+    assert _event_rows(database) == ["later", "original"]
