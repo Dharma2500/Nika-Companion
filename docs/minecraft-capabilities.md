@@ -2,7 +2,7 @@
 
 Target: Minecraft 1.21.11, Fabric client, official Mojang mappings.
 
-This inventory separates data that the current mod already sends, data that is technically readable from the local client, and data that remains excluded. A Minecraft API exposing a field does not automatically authorize Nika to collect it.
+This inventory records data sent by the current mod, the client API used to read it, and information that remains excluded. A Minecraft API exposing a field does not automatically authorize Nika to collect it.
 
 ## Collection rules
 
@@ -25,18 +25,18 @@ This inventory separates data that the current mod already sends, data that is t
 
 The block observer reads BlockState only. It does not inspect block entities, containers, sign text, NBT or other players.
 
-## Candidate capabilities verified against the 1.21.11 client API
+## Observation v3 fields and client API
 
-These are technically exposed through the client-side Minecraft API and are candidates for a future observation schema. They are not all collected today.
+These fields are collected by the v0.3.0 client mod after an explicit `/nika observe` command. The APIs are from the Minecraft 1.21.11 Mojang-mapped client.
 
 | Priority | Candidate | Client API surface | Why it may help | Guard |
 |---|---|---|---|---|
-| P1 | Biome at player position | LevelReader.getBiome(BlockPos) | Identifies the local environment | Query only the player's already-loaded position |
-| P1 | Time of day | Level.getDayTime() | Helps interpret daylight, night and timing-sensitive tasks | Send a compact time-of-day value, not a world save or full world metadata |
-| P1 | Rain / thunder state | Level.isRaining(), Level.isThundering() | Adds basic environmental context | Read current client-visible weather only |
-| P1 | Local light level | LevelReader.getLightLevel(BlockPos) | Helps reason about darkness and spawn safety | Query only the player's current loaded position |
-| P1 | Game mode | Player.gameMode() | Changes what actions and advice are appropriate | Report the local player's current mode only |
-| P1 | Movement state | Entity.onGround(), isSprinting(), isSwimming(), isCrouching() | Distinguishes standing, running, swimming and crouching | One-shot booleans only; no movement history |
+| v3 | Biome at player position | LevelReader.getBiome(BlockPos) | Identifies the local environment | Query only the player's already-loaded position |
+| v3 | Time of day | Level.getDayTime() | Helps interpret daylight, night and timing-sensitive tasks | Send a compact time-of-day value, not a world save or full world metadata |
+| v3 | Rain / thunder state | Level.isRaining(), Level.isThundering() | Adds basic environmental context | Read current client-visible weather only |
+| v3 | Local light level | LevelReader.getMaxLocalRawBrightness(BlockPos) | Helps reason about darkness and spawn safety | Query only the player's current loaded position |
+| v3 | Game mode | Player.gameMode() | Changes what actions and advice are appropriate | Report the local player's current mode only |
+| v3 | Movement state | Entity.onGround(), isSprinting(), isSwimming(), isCrouching() | Distinguishes standing, running, swimming and crouching | One-shot booleans only; no movement history |
 | P2 | Targeted block | Local crosshair hit result plus BlockHitResult | Lets Nika identify the block the player is looking at | Only a block hit in a loaded client chunk; no entity target or raycast expansion |
 
 The project build uses Mojang's official mappings. The methods above were checked against the 1.21.11 mapped API, including ClientLevel inheritance from Level, and LocalPlayer inheritance from the player/entity API.
@@ -51,7 +51,7 @@ The project build uses Mojang's official mappings. The methods above were checke
 - World seed, server files, hidden server state, anti-cheat data or permission bypasses
 - Automatic polling, continuous region scans or one-model-call-per-game-event behavior
 
-The currently included selected_item value is only the registry identifier of the item in the selected hotbar slot. It does not authorize reading the rest of the inventory.
+The currently included `selected_item` value is only the registry identifier of the item in the selected hotbar slot. It does not authorize reading the rest of the inventory.
 
 ## Implemented in observation v3
 
