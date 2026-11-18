@@ -26,8 +26,8 @@ from urllib.request import Request, urlopen
 
 from nika.config import Settings
 from nika.context import ContextBuilder, ContextBuildError
-from nika.database import SCHEMA_VERSION, Database
 from nika.dashboard import render_dashboard
+from nika.database import SCHEMA_VERSION, Database
 from nika.dialogue import (
     MAX_CHAT_REQUEST_BYTES,
     ChatValidationError,
