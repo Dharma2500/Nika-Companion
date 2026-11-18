@@ -54,8 +54,12 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Add observation schema v2 with bounded client-visible block-state sampling (5×3×5 region, max 32 blocks, max 12 properties per block)
 - [x] Preserve v1 validation and event compatibility while persisting versioned v1/v2 event types
 - [x] Verify v2 block-state observation and SQLite persistence on Vitaly's Windows machine
-- [ ] Define a client capability inventory and verify each candidate field against the actual client API
-- [ ] Add only approved, useful client-visible observation fields with explicit schema and privacy limits
+- [x] Document the client capability inventory and verify candidate API fields against Minecraft 1.21.11 mappings
+- [ ] Implement observation schema v3: local biome, time/weather, light level, game mode and one-shot movement state
+  - [ ] Preserve manual-only collection, loaded-position guards and the 8 KiB payload ceiling
+  - [ ] Keep v1/v2 validation and persistence compatibility
+  - [ ] Add strict v3 JSON Schema, Python validation tests and Fabric payload implementation
+  - [ ] Verify v3 observation and SQLite persistence on Vitaly's Windows machine
 - [ ] Client-only companion renderer
 - [ ] Action-request authentication, capability validation and approval gates
 
