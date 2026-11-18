@@ -354,6 +354,57 @@ def _sample_observation_payload() -> dict[str, object]:
     }
 
 
+
+
+def test_bridge_observation_v2_persists_bounded_block_sample(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status = json.loads(
+            (settings.data_dir / "runtime" / "status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        payload = _sample_observation_payload()
+        payload["schema_version"] = 2
+        payload["client"]["mod_version"] = "0.2.0"
+        payload["world"]["block_sample"] = {
+            "center": {"x": 125, "y": 72, "z": -4096},
+            "range": {"x": 2, "y": 1, "z": 2},
+            "scanned_positions": 75,
+            "non_air_blocks": 1,
+            "truncated": False,
+            "blocks": [
+                {
+                    "dx": 0,
+                    "dy": -1,
+                    "dz": 0,
+                    "id": "minecraft:stone",
+                    "properties": {},
+                    "properties_truncated": False,
+                }
+            ],
+        }
+        body = json.dumps(payload).encode("utf-8")
+        request = _signed_observation_request(status, body)
+        with urlopen(request, timeout=2) as response:
+            acknowledgement = json.loads(response.read().decode("utf-8"))
+            assert response.status == 202
+
+        assert acknowledgement["schema_version"] == 2
+        event_store = EventStore(Database(settings.database_path))
+        event = event_store.get(acknowledgement["event_id"])
+        assert event is not None
+        assert event["event_type"] == "minecraft.observation.v2"
+        assert json.loads(event["payload_json"]) == payload
+        assert event_store.count() == 1
+    finally:
+        assert stop_runtime(settings)
+
+
 def test_bridge_observation_v1_is_authenticated_and_persisted(
     tmp_path: Path,
 ) -> None:
