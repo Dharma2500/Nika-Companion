@@ -31,9 +31,15 @@ final class CompanionRenderer {
     private static final double TELEPORT_DISTANCE = 12.0;
 
     // Critically damped follow in real-time units (blocks/second).
-    // The spring has no oscillation and eases both acceleration and braking.
+    // Nika changes pace in slow, smooth phases instead of keeping a fixed speed.
     private static final double FOLLOW_SMOOTH_TIME = 0.38;
-    private static final double MAX_FOLLOW_SPEED = 7.0;
+    private static final double FOLLOW_SPEED_MIN = 3.6;
+    private static final double FOLLOW_SPEED_MAX = 7.0;
+    private static final double FOLLOW_SPEED_BASE = 5.2;
+    private static final double FOLLOW_PACE_RESPONSE_MOVING = 0.035;
+    private static final double FOLLOW_PACE_RESPONSE_IDLE = 0.06;
+    private static final int FOLLOW_PACE_MIN_DELAY = 45;
+    private static final int FOLLOW_PACE_MAX_DELAY = 100;
     private static final double TICK_SECONDS = 1.0 / 20.0;
     private static final double ARRIVAL_DISTANCE = 0.025;
 
@@ -64,6 +70,9 @@ final class CompanionRenderer {
     private static Vec3 desiredPosition;
     private static Vec3 smoothedPosition;
     private static Vec3 followVelocity = Vec3.ZERO;
+    private static double followSpeed = FOLLOW_SPEED_BASE;
+    private static double targetFollowSpeed = FOLLOW_SPEED_BASE;
+    private static long nextFollowPaceTick;
     private static Vec3 previousPlayerPosition;
     private static Vec3 travelDirection = new Vec3(0.0, 0.0, 1.0);
 
@@ -131,6 +140,7 @@ final class CompanionRenderer {
         previousPlayerPosition = playerPosition;
         wasMoving = moving;
 
+        updateFollowPace(gameTime, moving);
         updateFollowMotion();
 
         // Keep previous body/head angles for vanilla render-state interpolation.
@@ -235,6 +245,33 @@ final class CompanionRenderer {
     }
 
     /**
+     * Pick a new cruising pace only every few seconds, then ease toward it.
+     * Randomness is intentionally low-frequency: per-tick random speed changes
+     * would create visible jitter rather than natural variation.
+     */
+    private static void updateFollowPace(long gameTime, boolean moving) {
+        if (moving && gameTime >= nextFollowPaceTick) {
+            targetFollowSpeed = FOLLOW_SPEED_MIN
+                + RANDOM.nextDouble() * (FOLLOW_SPEED_MAX - FOLLOW_SPEED_MIN);
+            nextFollowPaceTick = gameTime
+                + randomDelay(FOLLOW_PACE_MIN_DELAY, FOLLOW_PACE_MAX_DELAY);
+        } else if (!moving) {
+            targetFollowSpeed = FOLLOW_SPEED_BASE;
+            nextFollowPaceTick = gameTime
+                + randomDelay(FOLLOW_PACE_MIN_DELAY, FOLLOW_PACE_MAX_DELAY);
+        }
+
+        double response = moving
+            ? FOLLOW_PACE_RESPONSE_MOVING
+            : FOLLOW_PACE_RESPONSE_IDLE;
+        followSpeed += (targetFollowSpeed - followSpeed) * response;
+
+        if (Math.abs(targetFollowSpeed - followSpeed) < 0.01) {
+            followSpeed = targetFollowSpeed;
+        }
+    }
+
+    /**
      * Critically damped spring integration (the same family of controller used
      * by SmoothDamp): velocity is stored in blocks/second and the timestep is
      * expressed in seconds. Unlike the previous steering controller, it does
@@ -265,7 +302,7 @@ final class CompanionRenderer {
 
         // Clamp the spring's working target to a finite catch-up speed without
         // changing the actual target or injecting a per-tick velocity impulse.
-        double maxChange = MAX_FOLLOW_SPEED * smoothTime;
+        double maxChange = followSpeed * smoothTime;
         Vec3 change = smoothedPosition.subtract(desiredPosition);
         double changeLength = change.length();
         if (changeLength > maxChange) {
@@ -343,6 +380,9 @@ final class CompanionRenderer {
             .add(0.0, HEIGHT_OFFSET, 0.0);
         smoothedPosition = desiredPosition;
         followVelocity = Vec3.ZERO;
+        followSpeed = FOLLOW_SPEED_BASE;
+        targetFollowSpeed = FOLLOW_SPEED_BASE;
+        nextFollowPaceTick = gameTime + randomDelay(FOLLOW_PACE_MIN_DELAY, FOLLOW_PACE_MAX_DELAY);
         previousPlayerPosition = playerPosition;
         travelDirection = forward;
         wasMoving = false;
@@ -385,6 +425,9 @@ final class CompanionRenderer {
         desiredPosition = null;
         smoothedPosition = null;
         followVelocity = Vec3.ZERO;
+        followSpeed = FOLLOW_SPEED_BASE;
+        targetFollowSpeed = FOLLOW_SPEED_BASE;
+        nextFollowPaceTick = 0L;
         previousPlayerPosition = null;
         travelDirection = new Vec3(0.0, 0.0, 1.0);
         idleAnchor = null;
