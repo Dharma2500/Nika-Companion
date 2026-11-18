@@ -75,6 +75,10 @@ The agent resolves `NIKA_DATA` and `NIKA_DATABASE_PATH` once from the process en
 
 The CLI checks that the data, logs, backups, runtime and database-parent locations are directories or can be created, and checks access to existing database files. A database outside `NIKA_DATA` is supported but reported as a warning because logs, runtime state and backups remain under `NIKA_DATA`. Invalid configuration fails before logging or database initialization can create or modify files.
 
+Learning assets default to `NIKA_DATA/learning`; `NIKA_LEARNING_DIR` can place them on a deliberately separate volume. The learning tree separates datasets, base models, adapters, checkpoints, experiment runs, caches and exports. It is distinct from conversational SQLite memory: learning weights are not updated for every conversation.
+
+The `migrate-data` operation must run under the runtime maintenance lock. It creates a fresh verified SQLite backup, copies ordinary data files and learning assets, excludes volatile runtime status/lock files, and snapshots the live SQLite database with the online backup API. The staged destination is integrity-checked before it is published. The original source directory is retained until the user verifies the new location.
+
 ## Persistence
 
 - SQLite is the initial source of truth for structured local data.
