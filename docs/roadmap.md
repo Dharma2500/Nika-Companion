@@ -59,8 +59,8 @@ Work proceeds by verified milestones. A milestone is not complete until its test
   - [x] Preserve manual-only collection, loaded-position guards and the 8 KiB payload ceiling
   - [x] Keep v1/v2 validation and persistence compatibility
   - [x] Add strict v3 JSON Schema, Python validation tests and Fabric payload implementation
-  - [ ] Verify v3 observation and SQLite persistence on Vitaly's Windows machine
-- [ ] Client-only companion renderer
+  - [x] Verify v3 observation and SQLite persistence on Vitaly's Windows machine
+- [ ] Client-only companion renderer (next milestone)
 - [ ] Action-request authentication, capability validation and approval gates
 
 ## Phase 3: memory, skills and dialogue
