@@ -206,3 +206,58 @@ def test_request_handles_truncated_http_response(
     monkeypatch.setattr(runtime, "urlopen", lambda *args, **kwargs: TruncatedResponse())
 
     assert runtime._request({"port": 12345, "token": "test"}, "GET", "/status") is None
+
+def test_maintenance_lock_stops_runtime_and_blocks_new_start(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+
+    with runtime.runtime_maintenance_lock(settings):
+        assert get_runtime_status(settings) is None
+        with pytest.raises(RuntimeError, match="already starting"):
+            start_runtime(settings)
+
+    assert start_runtime(settings) == "started"
+    assert stop_runtime(settings)
+
+
+def test_maintenance_lock_preserves_invalid_runtime_status(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    runtime_dir = settings.data_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
+    status_path = runtime_dir / "status.json"
+    status_path.write_text("{invalid", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="status file is invalid"):
+        with runtime.runtime_maintenance_lock(settings):
+            pytest.fail("maintenance must not begin with invalid runtime status")
+
+    assert status_path.read_text(encoding="utf-8") == "{invalid"
+
+
+def test_maintenance_lock_removes_dead_runtime_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    runtime_dir = settings.data_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
+    status_path = runtime_dir / "status.json"
+    status_path.write_text(
+        json.dumps({"pid": 2147483647, "port": 12345, "token": "stale-token"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "_pid_is_running", lambda pid: False)
+    monkeypatch.setattr(runtime, "_request", lambda *args, **kwargs: None)
+
+    with runtime.runtime_maintenance_lock(settings):
+        assert not status_path.exists()
+
