@@ -21,8 +21,8 @@ The project is built in small, testable layers. The local agent and persistent m
 | Persistent SQLite memory | Initial schema and event journal |
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions workflow added |
-| Fabric 1.21.11 client mod | Client-only mod; `/nika status` plus authenticated read-only bridge v1 `/nika connect`; CI verified, local handshake pending |
-| Python ↔ Minecraft protocol | To be designed and versioned |
+| Fabric 1.21.11 client mod | Client-only mod; `/nika status` and authenticated read-only bridge v1 `/nika connect`; CI and local Windows handshake verified |
+| Python ↔ Minecraft protocol | Authenticated loopback read-only handshake v1 implemented and locally verified; world observation remains disabled |
 | Dashboard, voice, external AI | Planned, not required for local core |
 
 ## Quick start
@@ -60,7 +60,7 @@ python -m nika.cli doctor
 
 ~~~text
 agent/                  Python agent package and tests
-minecraft-mod/          Fabric client mod (planned)
+minecraft-mod/          Fabric client mod
 docs/                   Architecture, security and roadmap
 .github/workflows/      Automated checks and future mod builds
 pyproject.toml          Python project and tool configuration
