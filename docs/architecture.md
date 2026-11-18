@@ -122,10 +122,21 @@ No component may claim that an unknown task can be solved offline without a matc
 
 ## Companion visual identity
 
-The in-game avatar for Nika is planned to use the Minecraft model/entity called
-"Тихоня". This supersedes the earlier alt-style avatar concept. The renderer
-and integration are not implemented yet; this is a recorded art-direction
-decision for the future companion model.
+The in-game avatar for Nika uses the vanilla Minecraft entity called
+"Тихоня" (Allay). This supersedes the earlier alt-style avatar concept.
+
+The v0.4.0 renderer prototype creates a client-side Allay object and submits its
+vanilla render state through Fabric's world-render event and Minecraft's entity
+render dispatcher. The object is never added to ClientLevel, never synchronized
+with a server, and is not visible to other players. AI and gravity are disabled;
+the object is only a visual representation positioned relative to the local
+player. The companion is disabled by default and can be enabled or disabled
+with /nika companion on and /nika companion off. Its in-memory object is
+discarded when the player leaves the world or changes dimensions.
+
+No custom entity type, server registration, pathfinding, collision, item pickup,
+or world interaction is part of this renderer. The milestone remains incomplete
+until the Fabric build and live in-game rendering/follow/cleanup checks pass.
 
 ## Minecraft integration
 
