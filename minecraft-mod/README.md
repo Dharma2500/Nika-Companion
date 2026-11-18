@@ -6,7 +6,7 @@ The Fabric 1.21.11 client-side component of the Nika-Companion project.
 
 - Client-only Fabric mod entry point
 - Client commands: `/nika` to summon, `/nika dismiss` to hide, `/nika status`, `/nika connect` (diagnostic), `/nika observe`
-- Client-only vanilla Allay companion with independent smooth body/head rotation, stable movement-direction follow, short idle glances and small local idle wandering
+- Client-only vanilla Allay companion with independent smooth body/head rotation, acceleration-limited inertial movement-direction follow, short idle glances and small local idle wandering
 - Reproducible Gradle wrapper build
 - GitHub Actions build artifact
 - Authenticated protocol-v1 read-only handshake with automatic connection and retry; `/nika connect` remains as a diagnostic command
@@ -35,7 +35,7 @@ From this directory:
 The remapped mod JAR is written to:
 
 ```
-build/libs/nika-companion-0.4.2.jar
+build/libs/nika-companion-0.4.3.jar
 ```
 
 Copy that JAR and a matching Fabric API build into the `mods` folder of the Fabric 1.21.11 game profile.
@@ -65,4 +65,4 @@ properties per block. V3 additionally reports the biome and environment at the
 player's current loaded position, plus game mode and current movement flags.
 The mod does not read inventory contents, block entities, containers, sign text,
 NBT, chat, server address, account identity, other players or hidden server state.
-The optional companion is a local render-only Allay instance. It is never added to the client world and is not visible to the server or other players. Summon it with `/nika`; dismiss it with `/nika dismiss`. While moving, Nika follows to the right and behind the filtered travel direction. When movement stops, her world-space idle anchor stays in place while you turn to look at her. Body and head yaw are smoothed independently; she periodically glances around and makes tiny movements within a small radius of her idle anchor. Follow motion uses a stable damped spring. No automatic observation or world-changing action is enabled.
+The optional companion is a local render-only Allay instance. It is never added to the client world and is not visible to the server or other players. Summon it with `/nika`; dismiss it with `/nika dismiss`. While moving, Nika follows to the right and behind the filtered travel direction. When movement stops, her world-space idle anchor stays in place while you turn to look at her. Body and head yaw are smoothed independently; she periodically glances around and makes tiny movements within a small radius of her idle anchor. Follow motion uses acceleration-limited steering with gradual acceleration and braking, so Nika can fall behind and catch up naturally. No automatic observation or world-changing action is enabled.
