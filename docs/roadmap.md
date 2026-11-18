@@ -46,11 +46,11 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 - [x] Fabric 1.21.11 client mod skeleton and reproducible JAR build (CI verified on JDK 21)
 - [x] Versioned localhost protocol v1 with a read-only handshake
 - [x] Dedicated bridge token, HMAC-SHA256 authentication and nonce replay protection
-- [ ] Verify Minecraft `/nika connect` against the updated Python runtime on Vitaly's Windows machine
-- [ ] Versioned JSON payload schemas and strict validation for future observation requests
-- [ ] Action-request authentication, capability validation and approval gates
+- [x] Verify Minecraft `/nika connect` and `/nika status` against the updated Python runtime on Vitaly's Windows machine (authenticated protocol v1 handshake confirmed; world observation remains disabled)
+- [ ] Define versioned JSON payload schemas and strict validation for observation requests
+- [ ] Discover client capabilities and implement bounded read-only observation (no world-changing actions)
 - [ ] Client-only companion renderer
-- [ ] Capability discovery and read-only observation first
+- [ ] Action-request authentication, capability validation and approval gates
 
 ## Phase 3: memory, skills and dialogue
 
