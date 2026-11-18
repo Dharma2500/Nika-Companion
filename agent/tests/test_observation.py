@@ -61,6 +61,28 @@ def sample_observation_v2() -> dict:
     return payload
 
 
+
+def sample_observation_v3() -> dict:
+    payload = sample_observation_v2()
+    payload["schema_version"] = 3
+    payload["client"]["mod_version"] = "0.3.0"
+    payload["world"]["environment"] = {
+        "biome": "minecraft:plains",
+        "time_of_day_ticks": 6000,
+        "raining": False,
+        "thundering": False,
+        "light_level": 12,
+    }
+    payload["player"]["state"] = {
+        "game_mode": "survival",
+        "on_ground": True,
+        "sprinting": False,
+        "swimming": False,
+        "crouching": False,
+    }
+    return payload
+
+
 def test_validate_observation_accepts_supported_v1_payload() -> None:
     result = validate_observation(sample_observation_v1())
 
@@ -81,8 +103,23 @@ def test_validate_observation_accepts_bounded_block_sample_v2() -> None:
     assert block_sample["blocks"][1]["properties"]["facing"] == "north"
 
 
-def test_decode_observation_accepts_utf8_json_for_both_versions() -> None:
-    for payload in (sample_observation_v1(), sample_observation_v2()):
+def test_validate_observation_accepts_v3_environment_and_player_state() -> None:
+    result = validate_observation(sample_observation_v3())
+
+    assert result["schema_version"] == 3
+    assert result["world"]["environment"]["biome"] == "minecraft:plains"
+    assert result["world"]["environment"]["time_of_day_ticks"] == 6000
+    assert result["world"]["environment"]["light_level"] == 12
+    assert result["player"]["state"]["game_mode"] == "survival"
+    assert result["player"]["state"]["on_ground"] is True
+
+
+def test_decode_observation_accepts_utf8_json_for_all_versions() -> None:
+    for payload in (
+        sample_observation_v1(),
+        sample_observation_v2(),
+        sample_observation_v3(),
+    ):
         body = json.dumps(payload).encode("utf-8")
         assert decode_observation(body) == validate_observation(payload)
 
@@ -93,7 +130,7 @@ def test_decode_observation_accepts_utf8_json_for_both_versions() -> None:
         (lambda value: value.update(extra=True), "unsupported properties"),
         (lambda value: value.pop("world"), "missing required properties"),
         (lambda value: value.update(schema_version=True), "schema version"),
-        (lambda value: value.update(schema_version=3), "schema version"),
+        (lambda value: value.update(schema_version=4), "schema version"),
         (
             lambda value: value["client"].update(extra="ignored"),
             "unsupported properties",
@@ -230,6 +267,52 @@ def test_validate_observation_requires_consistent_block_truncation() -> None:
     payload["world"]["block_sample"]["truncated"] = False
 
     with pytest.raises(ObservationValidationError, match="without setting the truncation flag"):
+        validate_observation(payload)
+
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda value: value["world"]["environment"].update(extra=True),
+            "unsupported properties",
+        ),
+        (
+            lambda value: value["world"]["environment"].update(biome="plains"),
+            "namespaced Minecraft identifier",
+        ),
+        (
+            lambda value: value["world"]["environment"].update(time_of_day_ticks=24000),
+            "integer from 0 to 23999",
+        ),
+        (
+            lambda value: value["world"]["environment"].update(raining=1),
+            "must be a boolean",
+        ),
+        (
+            lambda value: value["world"]["environment"].update(light_level=16),
+            "integer from 0 to 15",
+        ),
+        (
+            lambda value: value["player"]["state"].update(game_mode="godmode"),
+            "supported Minecraft game mode",
+        ),
+        (
+            lambda value: value["player"]["state"].update(on_ground="true"),
+            "must be a boolean",
+        ),
+        (
+            lambda value: value["player"]["state"].update(extra=True),
+            "unsupported properties",
+        ),
+    ],
+)
+def test_validate_observation_rejects_invalid_v3_fields(mutation, message: str) -> None:
+    payload = sample_observation_v3()
+    mutation(payload)
+
+    with pytest.raises(ObservationValidationError, match=message):
         validate_observation(payload)
 
 
