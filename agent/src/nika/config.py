@@ -18,6 +18,12 @@ class Settings:
 
     data_dir: Path
     database_path: Path
+    learning_dir: Path | None = None
+
+    @property
+    def learning_path(self) -> Path:
+        """Return the directory for datasets, models and learning artifacts."""
+        return self.learning_dir or self.data_dir / "learning"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -40,7 +46,18 @@ class Settings:
             else data_dir / "nika.sqlite3"
         )
 
-        return cls(data_dir=data_dir, database_path=database_path)
+        configured_learning_dir = os.environ.get("NIKA_LEARNING_DIR")
+        learning_dir = (
+            _resolve_configured_path("NIKA_LEARNING_DIR", configured_learning_dir)
+            if configured_learning_dir is not None
+            else data_dir / "learning"
+        )
+
+        return cls(
+            data_dir=data_dir,
+            database_path=database_path,
+            learning_dir=learning_dir,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +105,9 @@ def diagnose_settings(settings: Settings) -> tuple[ConfigDiagnostic, ...]:
     _check_directory(data_dir, "NIKA_DATA", findings)
     _check_directory(data_dir / "logs", "Logs directory", findings)
     _check_directory(data_dir / "backups", "Backups directory", findings)
+    learning_dir = Path(settings.learning_path).resolve()
     _check_directory(data_dir / "runtime", "Runtime directory", findings)
+    _check_directory(learning_dir, "Learning data directory", findings)
     _check_directory(database_path.parent, "Database parent directory", findings)
 
     if database_path.exists():
@@ -124,6 +143,19 @@ def diagnose_settings(settings: Settings) -> tuple[ConfigDiagnostic, ...]:
                 "WARNING",
                 "Database is outside NIKA_DATA. Logs, runtime state and backups will "
                 "still be stored under NIKA_DATA.",
+            )
+        )
+
+    try:
+        learning_is_inside_data = learning_dir.is_relative_to(data_dir)
+    except ValueError:
+        learning_is_inside_data = False
+    if not learning_is_inside_data:
+        findings.append(
+            ConfigDiagnostic(
+                "WARNING",
+                "Learning data is outside NIKA_DATA. Model and dataset files will be "
+                "stored separately from the main data directory.",
             )
         )
 
