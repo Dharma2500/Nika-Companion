@@ -69,6 +69,12 @@ Every durable knowledge record identifies its origin, timestamp, world/session w
 
 A fact about one world must not silently become a fact about every world. A reusable skill carries its Minecraft version, prerequisites, materials, procedure, validation steps, known failure modes and confidence.
 
+## Configuration validation
+
+The agent resolves `NIKA_DATA` and `NIKA_DATABASE_PATH` once from the process environment. Unset values use the documented defaults; explicitly empty values are configuration errors. Paths are expanded and resolved before use.
+
+The CLI checks that the data, logs, backups, runtime and database-parent locations are directories or can be created, and checks access to existing database files. A database outside `NIKA_DATA` is supported but reported as a warning because logs, runtime state and backups remain under `NIKA_DATA`. Invalid configuration fails before logging or database initialization can create or modify files.
+
 ## Persistence
 
 - SQLite is the initial source of truth for structured local data.
