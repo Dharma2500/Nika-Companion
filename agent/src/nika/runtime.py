@@ -27,10 +27,29 @@ from nika.config import Settings
 from nika.database import Database
 from nika.event_store import EventStore, NewEvent
 from nika.logging_setup import get_logger, setup_logging
+from nika.context import ContextBuilder
+from nika.dialogue import (
+    MAX_CHAT_REQUEST_BYTES,
+    ChatValidationError,
+    decode_chat_request,
+)
+from nika.memory import (
+    ConversationStore,
+    MemoryStore,
+    MemoryValidationError,
+    MessageInput,
+)
 from nika.observation import (
     MAX_OBSERVATION_BYTES,
     ObservationValidationError,
     decode_observation,
+)
+from nika.provider import (
+    OpenAICompatibleProvider,
+    ProviderConfigurationError,
+    ProviderError,
+    ProviderManager,
+    load_provider_config,
 )
 
 LOGGER = get_logger(__name__)
@@ -45,6 +64,7 @@ STOP_TIMEOUT = 10.0
 BRIDGE_PROTOCOL_VERSION = 1
 BRIDGE_HELLO_PATH = "/bridge/v1/hello"
 BRIDGE_OBSERVE_PATH = "/bridge/v1/observe"
+BRIDGE_CHAT_PATH = "/bridge/v1/chat"
 BRIDGE_MAX_REQUEST_BYTES = 64 * 1024
 BRIDGE_MAX_CLOCK_SKEW_SECONDS = 60
 BRIDGE_NONCE_TTL_SECONDS = 120
@@ -91,7 +111,12 @@ class BridgeAuthenticator:
             and path == BRIDGE_OBSERVE_PATH
             and 0 < len(body) <= MAX_OBSERVATION_BYTES
         )
-        if not (is_handshake or is_observation):
+        is_chat = (
+            method == "POST"
+            and path == BRIDGE_CHAT_PATH
+            and 0 < len(body) <= MAX_CHAT_REQUEST_BYTES
+        )
+        if not (is_handshake or is_observation or is_chat):
             return False
         if len(body) > BRIDGE_MAX_REQUEST_BYTES:
             return False
@@ -594,6 +619,20 @@ def serve(foreground: bool = False) -> None:
     database = Database(settings.database_path)
     database.initialize()
     event_store = EventStore(database)
+    memory_store = MemoryStore(database)
+    conversation_store = ConversationStore(database)
+    context_builder = ContextBuilder(conversation_store, memory_store)
+    provider_manager = ProviderManager()
+    try:
+        provider_config = load_provider_config()
+        if provider_config is not None:
+            provider_manager = ProviderManager(
+                OpenAICompatibleProvider(provider_config)
+            )
+    except ProviderConfigurationError:
+        # Keep the local runtime and memory available; never log config values.
+        LOGGER.error("runtime.provider_configuration_invalid")
+    chat_request_lock = threading.Lock()
     stop_event = threading.Event()
     shutdown_complete = threading.Event()
     _console_handler: tuple[Any, Any] | None = None
@@ -666,11 +705,188 @@ def serve(foreground: bool = False) -> None:
                     "state": "running",
                     "pid": os.getpid(),
                     "version": "0.1.0",
-                    "capabilities": ["health.read", "observation.submit"],
+                    "capabilities": [
+                        "health.read",
+                        "observation.submit",
+                        *(
+                            ["dialogue.chat"]
+                            if provider_manager.is_available
+                            else []
+                        ),
+                    ],
                 },
             )
 
         def do_POST(self) -> None:
+            if self.path == BRIDGE_CHAT_PATH:
+                raw_length = self.headers.get("Content-Length", "")
+                if (
+                    not raw_length
+                    or not raw_length.isascii()
+                    or not raw_length.isdecimal()
+                ):
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 10:
+                    self._send(413, {"error": "request_too_large"})
+                    return
+                content_length = int(raw_length)
+                if content_length > MAX_CHAT_REQUEST_BYTES:
+                    self._send(413, {"error": "chat_request_too_large"})
+                    return
+                if (
+                    content_length == 0
+                    or self.headers.get("Transfer-Encoding") is not None
+                ):
+                    self._send(400, {"error": "invalid_chat_body"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+
+                body = self.rfile.read(content_length)
+                if len(body) != content_length:
+                    self._send(400, {"error": "incomplete_request_body"})
+                    return
+                if not bridge_authenticator.verify(
+                    method=self.command,
+                    path=self.path,
+                    timestamp=self.headers.get("X-Nika-Bridge-Timestamp", ""),
+                    nonce=self.headers.get("X-Nika-Bridge-Nonce", ""),
+                    signature=self.headers.get("X-Nika-Bridge-Signature", ""),
+                    body=body,
+                ):
+                    self._send(403, {"error": "unauthorized"})
+                    return
+
+                try:
+                    chat_request = decode_chat_request(body)
+                except ChatValidationError as error:
+                    self._send(
+                        400,
+                        {"error": "invalid_chat_request", "message": str(error)},
+                    )
+                    return
+
+                if not provider_manager.is_available:
+                    self._send(503, {"error": "provider_unconfigured"})
+                    return
+
+                # The local runtime is a single trusted process. Serializing chat
+                # requests prevents simultaneous duplicate generation while the
+                # unique request IDs keep retries idempotent across reconnects.
+                with chat_request_lock:
+                    try:
+                        conversation = conversation_store.get_conversation(
+                            chat_request.conversation_id
+                        )
+                        if conversation is None:
+                            try:
+                                conversation = conversation_store.create_conversation(
+                                    conversation_id=chat_request.conversation_id
+                                )
+                            except sqlite3.IntegrityError:
+                                conversation = conversation_store.get_conversation(
+                                    chat_request.conversation_id
+                                )
+                                if conversation is None:
+                                    raise
+
+                        assistant_request_id = f"{chat_request.request_id}:assistant"
+                        cached_reply = conversation_store.get_message_by_request_id(
+                            assistant_request_id
+                        )
+                        if cached_reply is not None:
+                            if (
+                                cached_reply.conversation_id
+                                != chat_request.conversation_id
+                                or cached_reply.role != "assistant"
+                            ):
+                                self._send(409, {"error": "request_id_conflict"})
+                                return
+                            self._send(
+                                200,
+                                {
+                                    "service": "nika",
+                                    "accepted": True,
+                                    "conversation_id": chat_request.conversation_id,
+                                    "request_id": chat_request.request_id,
+                                    "assistant_message_id": cached_reply.message_id,
+                                    "reply": cached_reply.content,
+                                    "cached": True,
+                                },
+                            )
+                            return
+
+                        conversation_store.append_message(
+                            chat_request.conversation_id,
+                            MessageInput(
+                                role="user",
+                                content=chat_request.message,
+                                source="minecraft-client",
+                                request_id=chat_request.request_id,
+                            ),
+                        )
+                        conversation = conversation_store.get_conversation(
+                            chat_request.conversation_id
+                        )
+                        if conversation is None:
+                            raise MemoryValidationError("Conversation disappeared.")
+
+                        context = context_builder.build(
+                            chat_request.conversation_id,
+                            chat_request.message,
+                            world_id=conversation.world_id,
+                        )
+                    except MemoryValidationError as error:
+                        self._send(
+                            400,
+                            {"error": "invalid_conversation", "message": str(error)},
+                        )
+                        return
+                    except sqlite3.Error:
+                        LOGGER.exception("runtime.chat_persistence_failed")
+                        self._send(503, {"error": "chat_persistence_failed"})
+                        return
+
+                    try:
+                        reply = provider_manager.complete(context)
+                    except ProviderError:
+                        # The user turn remains stored. Retrying the same request ID
+                        # reuses it and only retries generation; no chat text is logged.
+                        self._send(503, {"error": "provider_unavailable"})
+                        return
+
+                    try:
+                        assistant_message = conversation_store.append_message(
+                            chat_request.conversation_id,
+                            MessageInput(
+                                role="assistant",
+                                content=reply,
+                                source="nika-core",
+                                request_id=assistant_request_id,
+                            ),
+                        )
+                    except (MemoryValidationError, sqlite3.Error):
+                        LOGGER.exception("runtime.chat_reply_persist_failed")
+                        self._send(503, {"error": "reply_persistence_failed"})
+                        return
+
+                    self._send(
+                        200,
+                        {
+                            "service": "nika",
+                            "accepted": True,
+                            "conversation_id": chat_request.conversation_id,
+                            "request_id": chat_request.request_id,
+                            "assistant_message_id": assistant_message.message_id,
+                            "reply": assistant_message.content,
+                            "cached": False,
+                        },
+                    )
+                return
+
             if self.path == BRIDGE_OBSERVE_PATH:
                 raw_length = self.headers.get("Content-Length", "")
                 if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
