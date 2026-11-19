@@ -110,17 +110,36 @@ class LocalLearningEngine:
 
         correction = _CORRECTION.fullmatch(message)
         if correction is not None:
-            candidate_id = self.learning_store.add_candidate(
-                correction.group(1).strip(),
-                source="minecraft-private-chat",
-                trigger_type="explicit_correction",
+            fact = correction.group(1).strip()
+            existing = next(
+                (
+                    memory
+                    for memory in self.memory_store.search_memories(fact, limit=50)
+                    if memory.content.casefold() == fact.casefold()
+                    and memory.provenance_type == "user_taught"
+                ),
+                None,
+            )
+            if existing is not None:
+                return LearningResult(
+                    kind="already_known",
+                    reply="Эта поправка уже есть в локальной памяти. Повторно не записывала.",
+                    memory_id=existing.memory_id,
+                )
+            memory = self.memory_store.add_memory(
+                MemoryInput(
+                    category="correction",
+                    content=fact,
+                    source="minecraft-private-chat",
+                    confidence=1.0,
+                    provenance_type="user_taught",
+                    scope="global",
+                    tags=("explicit-correction", "local-learning"),
+                )
             )
             return LearningResult(
-                kind="candidate",
-                reply=(
-                    "Поправку сохранила локально как кандидат на обучение. "
-                    "Она не станет подтверждённым фактом, пока ты её не проверишь."
-                ),
-                candidate_id=candidate_id,
+                kind="corrected",
+                reply="Поправку приняла и сохранила локально. API для этого не использовался.",
+                memory_id=memory.memory_id,
             )
         return None
