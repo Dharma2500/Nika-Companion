@@ -774,7 +774,7 @@ def test_dashboard_uses_single_use_ticket_and_redacted_local_session(
         assert dashboard_status["runtime"] == "running"
         assert dashboard_status["database"] == {
             "healthy": True,
-            "schema_version": 2,
+            "schema_version": 3,
         }
         assert dashboard_status["provider"] == {
             "configured": False,
