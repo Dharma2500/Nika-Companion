@@ -67,6 +67,23 @@ def render_dashboard(nonce: str) -> bytes:
       cursor: pointer;
     }
     button:hover { background: #302638; }
+    button:disabled { opacity: .55; cursor: wait; }
+    input {
+      width: 100%;
+      margin-top: 8px;
+      border: 1px solid #51445e;
+      border-radius: 10px;
+      background: #121118;
+      color: #f6efff;
+      padding: 12px;
+      font: inherit;
+    }
+    input:focus { outline: 2px solid #9d79c8; outline-offset: 2px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+    .field { display: block; color: #c9c1d1; font-size: 13px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .feedback { min-height: 20px; margin-top: 14px; color: #a9d9bd; font-size: 13px; }
+    .feedback.bad { color: #f29ca6; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
     .card {
       border: 1px solid #39313f;
@@ -93,7 +110,7 @@ def render_dashboard(nonce: str) -> bytes:
     footer { color: #777181; font-size: 12px; margin-top: 28px; }
     @media (max-width: 620px) {
       header { align-items: flex-start; flex-direction: column; }
-      .grid { grid-template-columns: 1fr; }
+      .grid, .form-grid { grid-template-columns: 1fr; }
       .wide { grid-column: auto; }
     }
   </style>
@@ -127,12 +144,36 @@ def render_dashboard(nonce: str) -> bytes:
     <article class="card">
       <div class="label">Модель</div>
       <div class="value" id="provider">Проверка…</div>
-      <div class="detail">Показывается только факт настройки. Адреса и ключи не раскрываются.</div>
+      <div class="detail" id="provider-detail">Модель ещё не подключена.</div>
     </article>
     <article class="card">
       <div class="label">Возможности bridge</div>
       <div class="value" id="capabilities">Проверка…</div>
       <div class="detail">Только локальный аутентифицированный канал.</div>
+    </article>
+    <article class="card wide">
+      <div class="label">Подключение модели</div>
+      <div class="detail">
+        Укажи OpenAI-compatible Base URL и точный Model ID. Для LM Studio включи Local Server.
+        Если модель запущена на другом компьютере, укажи его LAN-адрес вместо 127.0.0.1.
+      </div>
+      <div class="form-grid">
+        <label class="field" for="provider-base-url">
+          Base URL
+          <input id="provider-base-url" type="url" maxlength="2048"
+            placeholder="http://127.0.0.1:1234/v1" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="field" for="provider-model">
+          Model ID
+          <input id="provider-model" type="text" maxlength="160"
+            placeholder="Имя модели из LM Studio" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="provider-save" type="button">Сохранить настройки</button>
+        <button id="provider-test" type="button">Проверить соединение</button>
+      </div>
+      <div id="provider-feedback" class="feedback" role="status"></div>
     </article>
     <article class="card wide">
       <div class="label">Локальное хранилище</div>
@@ -143,7 +184,7 @@ def render_dashboard(nonce: str) -> bytes:
   <div id="error" role="status"></div>
   <footer>
     Панель доступна только через локальный адрес 127.0.0.1.
-    Настройка провайдера и управление секретами появятся отдельным этапом.
+    Настройки модели сохраняются в NIKA_DATA. Секретные ключи в этой версии через панель не вводятся.
   </footer>
 </main>
 <script nonce="__NONCE__">
@@ -177,6 +218,18 @@ def render_dashboard(nonce: str) -> bytes:
       text("schema", "Схема SQLite: v" + data.database.schema_version);
 
       text("provider", data.provider.configured ? "Настроен" : "Не настроен");
+      text(
+        "provider-detail",
+        data.provider.configured
+          ? "Модель: " + data.provider.model + " · " + data.provider.base_url
+          : "Укажи адрес сервера и Model ID ниже, затем проверь соединение."
+      );
+      if (document.activeElement !== byId("provider-base-url")) {
+        text("provider-base-url", data.provider.base_url || "");
+      }
+      if (document.activeElement !== byId("provider-model")) {
+        text("provider-model", data.provider.model || "");
+      }
       text("capabilities", data.capabilities.length ? data.capabilities.join(" · ") : "Нет");
       const c = data.counts;
       text("counts", "События: " + c.events + " · Факты памяти: " + c.memories +
@@ -209,6 +262,73 @@ def render_dashboard(nonce: str) -> bytes:
     }
     await refresh();
   }
+
+  async function postJson(path, payload) {
+    const response = await fetch(path, {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        data.message || "Запрос отклонён (HTTP " + response.status + ")."
+      );
+    }
+    return data;
+  }
+
+  function showProviderFeedback(message, bad = false) {
+    const target = byId("provider-feedback");
+    target.textContent = message;
+    target.className = "feedback" + (bad ? " bad" : "");
+  }
+
+  byId("provider-save").addEventListener("click", async () => {
+    showProviderFeedback("Сохраняю настройки…");
+    byId("provider-save").disabled = true;
+    try {
+      await postJson("/dashboard/api/provider", {
+        base_url: byId("provider-base-url").value.trim(),
+        model: byId("provider-model").value.trim()
+      });
+      showProviderFeedback(
+        "Настройки сохранены. Теперь нажми «Проверить соединение»."
+      );
+      await refresh();
+    } catch (error) {
+      showProviderFeedback(
+        error instanceof Error ? error.message : "Не удалось сохранить настройки.",
+        true
+      );
+    } finally {
+      byId("provider-save").disabled = false;
+    }
+  });
+
+  byId("provider-test").addEventListener("click", async () => {
+    showProviderFeedback("Проверяю соединение и генерацию…");
+    byId("provider-test").disabled = true;
+    try {
+      await postJson("/dashboard/api/provider/test", {});
+      showProviderFeedback(
+        "Модель отвечает. Ника готова к приватному диалогу."
+      );
+      await refresh();
+    } catch (error) {
+      showProviderFeedback(
+        error instanceof Error ? error.message : "Модель не ответила.",
+        true
+      );
+    } finally {
+      byId("provider-test").disabled = false;
+    }
+  });
 
   byId("refresh").addEventListener("click", refresh);
   bootstrap().catch((error) => {
