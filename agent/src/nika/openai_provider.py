@@ -16,9 +16,8 @@ from urllib.request import Request, urlopen
 
 from nika.credentials import validate_openai_secret
 from nika.provider import (
-    OpenAICompatibleProvider,
-    ProviderManager as LegacyProviderManager,
     ProviderConfig,
+    ProviderManager as LegacyProviderManager,
     MAX_PROVIDER_MODEL_CHARS,
     MAX_PROVIDER_REPLY_CHARS,
     MAX_PROVIDER_REQUEST_BYTES,
@@ -266,7 +265,10 @@ class OpenAIResponsesProvider:
                         text_parts.append(part["text"])
         reply = "\n".join(part for part in text_parts if part.strip()).strip()
         if not reply or len(reply) > MAX_PROVIDER_REPLY_CHARS:
-            raise ProviderError("OpenAI returned an empty or oversized reply.", kind="invalid_response")
+            raise ProviderError(
+                "OpenAI returned an empty or oversized reply.",
+                kind="invalid_response",
+            )
 
         usage = decoded.get("usage")
         if not isinstance(usage, dict):
@@ -371,19 +373,37 @@ class OpenAIResponsesProvider:
         if world_context is not None:
             instructions += (
                 "\n\nFresh bounded client observation (not hidden server state):\n"
-                + json.dumps(world_context, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+                + json.dumps(
+                    world_context,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
             )
         input_items: list[dict[str, str]] = []
         for item in history:
             if not isinstance(item, dict):
-                raise ProviderError("Dialogue history contains an invalid item.", kind="invalid_request")
+                raise ProviderError(
+                    "Dialogue history contains an invalid item.",
+                    kind="invalid_request",
+                )
             role = item.get("role")
             text = item.get("content")
-            if role not in {"user", "assistant"} or not isinstance(text, str) or not text.strip():
-                raise ProviderError("Dialogue history contains an invalid message.", kind="invalid_request")
+            if (
+                role not in {"user", "assistant"}
+                or not isinstance(text, str)
+                or not text.strip()
+            ):
+                raise ProviderError(
+                    "Dialogue history contains an invalid message.",
+                    kind="invalid_request",
+                )
             input_items.append({"role": role, "content": text})
         if input_items[-1]["role"] != "user":
-            raise ProviderError("Latest dialogue item must be from the user.", kind="invalid_request")
+            raise ProviderError(
+                "Latest dialogue item must be from the user.",
+                kind="invalid_request",
+            )
         return instructions, input_items
 
 
