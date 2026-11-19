@@ -189,3 +189,13 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Documentation synchronization after #433 was also checked by Python CI #437 (run 44597059597), all six jobs plus source overlay succeeded. Artifact #14566416589 contains that docs snapshot.
 - A final handoff correction is committed after #437; therefore #14566416589 is not the final user ZIP source. Build the final user ZIP from the newest successful workflow/source-overlay artifact after this correction.
 - No Java source changed. The JAR remains unchanged.
+
+
+## 2026-11-19: final source overlay for OpenAI dual-key release
+
+- Final branch head for the implementation package: 167d52fcfcf2ba58d53175a32d733e649669ab01.
+- Python CI #439 (run 44597701786) passed six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs, 185 tests per job, Ruff, compileall and source-overlay generation.
+- Current source overlay artifact ID: 14567210993.
+- Fabric build #223 (run 44597701458) passed. No Java source changed, so no JAR update.
+- Manual acceptance remains for Windows Credential Manager and the actual OpenAI API keys; no user secrets were used in CI.
+- PR #1 remains open/draft/unmerged.
