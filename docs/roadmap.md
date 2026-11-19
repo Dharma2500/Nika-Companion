@@ -115,7 +115,7 @@ Design baseline: `docs/memory-dialogue-design.md`.
   - [x] Add CLI command 'nika dashboard'; start the runtime when needed and launch the browser
   - [x] Cover unauthenticated access, same-origin exchange, ticket replay, redacted status and CLI launch with tests
 - [ ] Verify the dashboard launch and visual layout manually on Vitaly's Windows machine
-- [ ] Add non-secret provider URL/model settings and a connection test
+- [x] Add non-secret provider URL/model settings and a real generation connection test
 - [ ] Add API credential storage near the end of the dashboard work, using an OS-backed local secret store; never expose secret values to browser JavaScript
 - [ ] Add bounded diagnostics and safe runtime controls with explicit confirmation for stop/restart
 - [ ] Memory review and correction tools
