@@ -804,7 +804,8 @@ def serve(foreground: bool = False) -> None:
             self.end_headers()
 
         def do_GET(self) -> None:
-            if self.path in {"/dashboard", "/dashboard/"}:
+            request_path = self.path.split("?", 1)[0]
+            if request_path in {"/dashboard", "/dashboard/"}:
                 if not self._dashboard_local_host():
                     self._send(403, {"error": "local_host_required"})
                     return
@@ -829,7 +830,7 @@ def serve(foreground: bool = False) -> None:
                 self.wfile.write(body)
                 return
 
-            if self.path == "/dashboard/api/status":
+            if request_path == "/dashboard/api/status":
                 if not self._dashboard_local_host():
                     self._send(403, {"error": "local_host_required"})
                     return
@@ -924,7 +925,7 @@ def serve(foreground: bool = False) -> None:
                 )
                 return
 
-            if self.path == "/status":
+            if request_path == "/status":
                 if not self._authorized():
                     self._send(403, {"error": "unauthorized"})
                 else:
@@ -938,7 +939,7 @@ def serve(foreground: bool = False) -> None:
                     )
                 return
 
-            if self.path != BRIDGE_HELLO_PATH:
+            if request_path != BRIDGE_HELLO_PATH:
                 self._send(404, {"error": "not_found"})
                 return
 
