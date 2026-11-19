@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import math
 import os
+import tempfile
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -17,6 +20,7 @@ MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024
 MAX_PROVIDER_REPLY_CHARS = 12_000
 MAX_PROVIDER_MODEL_CHARS = 160
 MAX_PROVIDER_URL_CHARS = 2048
+MAX_PROVIDER_CONFIG_BYTES = 8192
 
 
 class ProviderConfigurationError(ValueError):
@@ -74,25 +78,114 @@ class ProviderConfig:
 
 def load_provider_config(
     environ: Mapping[str, str] | None = None,
+    *,
+    config_path: Path | None = None,
 ) -> ProviderConfig | None:
-    """Load provider settings; return None when no provider is configured."""
+    """Load environment overrides or the local non-secret provider settings file."""
     values = os.environ if environ is None else environ
     base_url = values.get("NIKA_LLM_BASE_URL", "").strip()
     model = values.get("NIKA_LLM_MODEL", "").strip()
     api_key = values.get("NIKA_LLM_API_KEY", "").strip() or None
 
-    if not base_url and not model:
-        if api_key is not None:
+    if base_url or model:
+        if not base_url or not model:
             raise ProviderConfigurationError(
-                "NIKA_LLM_API_KEY is set but no provider endpoint/model is configured."
+                "NIKA_LLM_BASE_URL and NIKA_LLM_MODEL must be configured together."
             )
-        return None
-    if not base_url or not model:
-        raise ProviderConfigurationError(
-            "NIKA_LLM_BASE_URL and NIKA_LLM_MODEL must be configured together."
+        return ProviderConfig(base_url=base_url, model=model, api_key=api_key)
+
+    if config_path is not None and config_path.exists():
+        if config_path.is_symlink() or not config_path.is_file():
+            raise ProviderConfigurationError(
+                "The local provider configuration path must be a regular file."
+            )
+        try:
+            raw = config_path.read_bytes()
+        except OSError:
+            raise ProviderConfigurationError(
+                "The local provider configuration could not be read."
+            ) from None
+        if not raw or len(raw) > MAX_PROVIDER_CONFIG_BYTES:
+            raise ProviderConfigurationError(
+                "The local provider configuration has an invalid size."
+            )
+        try:
+            payload = json.loads(
+                raw.decode("utf-8"),
+                object_pairs_hook=_unique_json_object,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            raise ProviderConfigurationError(
+                "The local provider configuration is not valid JSON."
+            ) from None
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"schema_version", "base_url", "model"}
+            or type(payload.get("schema_version")) is not int
+            or payload["schema_version"] != 1
+            or not isinstance(payload.get("base_url"), str)
+            or not isinstance(payload.get("model"), str)
+        ):
+            raise ProviderConfigurationError(
+                "The local provider configuration has an unsupported format."
+            )
+        return ProviderConfig(
+            base_url=payload["base_url"],
+            model=payload["model"],
+            api_key=api_key,
         )
 
-    return ProviderConfig(base_url=base_url, model=model, api_key=api_key)
+    if api_key is not None:
+        raise ProviderConfigurationError(
+            "NIKA_LLM_API_KEY is set but no provider endpoint/model is configured."
+        )
+    return None
+
+
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON property.")
+        result[key] = value
+    return result
+
+
+def save_provider_config(
+    config_path: Path,
+    *,
+    base_url: str,
+    model: str,
+) -> ProviderConfig:
+    """Atomically save a validated, non-secret provider endpoint and model ID."""
+    config = ProviderConfig(base_url=base_url, model=model)
+    payload = json.dumps(
+        {
+            "schema_version": 1,
+            "base_url": config.base_url,
+            "model": config.model,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".provider-",
+        suffix=".tmp",
+        dir=config_path.parent,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if os.name != "nt":
+            os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, config_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return config
 
 
 class OpenAICompatibleProvider:
@@ -255,19 +348,53 @@ class OpenAICompatibleProvider:
 
 
 class ProviderManager:
-    """Expose an honest provider availability state and one bounded completion API."""
+    """Expose a thread-safe provider that can be configured from the local dashboard."""
 
     def __init__(self, provider: OpenAICompatibleProvider | None = None) -> None:
-        self.provider = provider
+        self._provider = provider
+        self._lock = threading.RLock()
+
+    @property
+    def config(self) -> ProviderConfig | None:
+        with self._lock:
+            return self._provider.config if self._provider is not None else None
 
     @property
     def is_available(self) -> bool:
-        return self.provider is not None
+        return self.config is not None
+
+    def configure(self, config: ProviderConfig | None) -> None:
+        provider = OpenAICompatibleProvider(config) if config is not None else None
+        with self._lock:
+            self._provider = provider
 
     def complete(self, context: dict[str, object]) -> str:
-        if self.provider is None:
+        with self._lock:
+            provider = self._provider
+        if provider is None:
             raise ProviderError("No language model provider is configured.")
-        return self.provider.complete(context)
+        return provider.complete(context)
+
+    def test_connection(self) -> None:
+        """Perform one minimal generation without saving it to conversation history."""
+        with self._lock:
+            provider = self._provider
+        if provider is None:
+            raise ProviderError("No language model provider is configured.")
+        provider.complete(
+            {
+                "schema_version": 1,
+                "personality": "You are a local connection test. Reply briefly and truthfully.",
+                "history": [
+                    {
+                        "role": "user",
+                        "content": "Reply with exactly: Nika connection OK",
+                    }
+                ],
+                "memories": [],
+                "world_context": None,
+            }
+        )
 
 
 def _validate_base_url(value: str) -> str:
