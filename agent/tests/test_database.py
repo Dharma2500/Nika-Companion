@@ -25,6 +25,7 @@ def test_initialize_creates_versioned_schema(tmp_path: Path) -> None:
     assert {"event_log", "memories", "skills", "world_facts"} <= tables
     assert {"provenance_type", "scope", "world_id", "tags_json"} <= memory_columns
     assert {"conversations", "conversation_messages"} <= tables
+    assert {"provider_usage", "learning_candidates"} <= tables
 
 
 def test_initialize_is_idempotent(tmp_path: Path) -> None:
