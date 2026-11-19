@@ -346,3 +346,52 @@ The recovery check also corrected conflicting handoff documentation without touc
 - Latest Fabric build #146 succeeded and uploaded artifact ID 14481902637. No Minecraft client mod source changed in this dashboard milestone.
 - The automated tests verify HTTP/session behavior but do not replace a manual browser test on Vitaly's Windows PC.
 - The earlier failed lint runs #354 and #356 exposed long inline page lines and an import-order issue. These were corrected; current source commit 0a83e9e... passed the latest CI.
+
+
+## 15. Dashboard model configuration milestone (2026-11-19)
+
+### Diagnosis
+- Vitaly confirmed that the dashboard page opened and Minecraft private chat mode activated, but the client displayed: "приватный режим включён, но bridge/модель недоступны".
+- The Fabric client blocks ordinary messages locally when private mode is active but dialogue.chat is not advertised by the bridge. This is intentional fail-closed privacy behavior: no private text is silently forwarded to the multiplayer server.
+- The Python runtime previously advertised dialogue.chat only when a provider was configured through environment variables. The dashboard was read-only, so a model had not yet been configured.
+- BridgeClient retries the local handshake at bounded intervals (about five seconds). Once the Python runtime advertises dialogue.chat, the existing client can observe it on its next handshake; no JAR update is required for this provider-only milestone.
+
+### Implemented
+- agent/src/nika/provider.py:
+  - load_provider_config() still supports explicit environment overrides (NIKA_LLM_BASE_URL, NIKA_LLM_MODEL, optional NIKA_LLM_API_KEY) and now also reads NIKA_DATA/config/provider.json.
+  - The persisted JSON schema is version 1 and contains exactly schema_version, base_url and model. No secret is stored in this file.
+  - The file is size-bounded, duplicate-key checked, validated through ProviderConfig and written atomically via a temporary file plus os.replace. POSIX permissions are restricted to owner read/write.
+  - ProviderManager is thread-safe and can atomically swap the active provider without restarting the runtime.
+  - The connection test performs a minimal real chat-completion generation; it does not add test messages to the user's conversation history.
+- agent/src/nika/runtime.py:
+  - Runtime loads the non-secret config from NIKA_DATA when environment variables do not override it.
+  - Authenticated session-protected dashboard POST routes save provider settings and run the generation test. They validate loopback Host, one-hour session cookie, exact Origin, Sec-Fetch-Site, Content-Type, body size and exact JSON shape.
+  - Dashboard status now returns configured state, Base URL and Model ID (not an API key or bridge/runtime secret), and advertises dialogue.chat only while a provider is configured.
+  - If Base URL or Model ID environment overrides are present, dashboard editing returns HTTP 409 with an explanation instead of silently overriding them.
+- agent/src/nika/dashboard.py:
+  - Added Base URL and Model ID fields, Save and Test buttons, loading/error/success feedback and status refresh.
+  - UI input values are refreshed from the saved configuration.
+  - For LM Studio on the same computer as the Python runtime, the common Base URL is http://127.0.0.1:1234/v1, but the user must use the actual configured port. When LM Studio runs on a different computer, use that PC's reachable LAN address and make its local server reachable on the network.
+- No API-key input was added. Local LM Studio without a key is the intended first acceptance target. Cloud/provider credentials remain deferred until an OS-backed local credential store is implemented. No secret may be placed into Git, browser storage, logs or provider.json.
+
+### Automated validation
+- Latest code head before this documentation refresh: 5d2d16726f80804ed13f4e92b8c92cc8f828e99f.
+- Python CI #370: run 44569289812; all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; each collected and passed 164 tests; Ruff and compileall passed. Source overlay artifact ID 14552468722.
+- Fabric build #154: run 44569289697 succeeded; artifact ID 14554765345. No Java source change was required for this milestone.
+- Earlier lint-only failures in runs #367–#369 were corrected; they were import ordering and line-length issues. The latest run #370 is fully green.
+- These CI results validate the fake-server integration path, not Vitaly's actual LM Studio server. Manual Windows acceptance remains.
+
+### Exact local setup after receiving the source overlay ZIP
+1. Stop the current runtime from C:\Nika-Companion with:
+   .\.venv\Scripts\python.exe -m nika.cli stop
+2. Extract the source ZIP directly over C:\Nika-Companion and overwrite tracked files. Preserve .venv and NIKA_DATA; neither is included in the overlay.
+3. Run:
+   .\.venv\Scripts\python.exe -m nika.cli dashboard
+4. Enter the real OpenAI-compatible Base URL and exact Model ID from the LM Studio server, click Save, then Test Connection.
+5. After a successful generation test, the running Python provider is active immediately. The Minecraft client should see dialogue.chat on the next automatic handshake. Test first in a safe/private world and verify messages/replies are local only.
+
+### Current repository state and next work
+- Repository: Dharma2500/Nika-Companion; active branch: feature/companion-renderer-v0.4.0; PR #1 remains open, draft and unmerged. Do not merge without Vitaly's explicit approval.
+- Python source overlay artifact for the code head above: 14552468722. It is superseded if any newer docs or source commits are pushed; always package from the latest successful source-overlay run.
+- Manual Windows dashboard/model acceptance and real LM Studio endpoint/model verification are still outstanding.
+- Next: confirm Vitaly's actual LM Studio listener address and model ID via the dashboard's connection test; improve error diagnostics from sanitized provider status; then continue safe text dialogue and explicit memory review. API-key handling remains deferred.
