@@ -79,7 +79,12 @@ def render_dashboard(nonce: str) -> bytes:
       font: inherit;
     }
     input:focus { outline: 2px solid #9d79c8; outline-offset: 2px; }
-    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
     .field { display: block; color: #c9c1d1; font-size: 13px; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
     .feedback { min-height: 20px; margin-top: 14px; color: #a9d9bd; font-size: 13px; }
@@ -184,7 +189,8 @@ def render_dashboard(nonce: str) -> bytes:
   <div id="error" role="status"></div>
   <footer>
     Панель доступна только через локальный адрес 127.0.0.1.
-    Настройки модели сохраняются в NIKA_DATA. Секретные ключи в этой версии через панель не вводятся.
+    Настройки модели сохраняются в NIKA_DATA.
+    Секретные ключи в этой версии через панель не вводятся.
   </footer>
 </main>
 <script nonce="__NONCE__">
@@ -225,10 +231,10 @@ def render_dashboard(nonce: str) -> bytes:
           : "Укажи адрес сервера и Model ID ниже, затем проверь соединение."
       );
       if (document.activeElement !== byId("provider-base-url")) {
-        text("provider-base-url", data.provider.base_url || "");
+        byId("provider-base-url").value = data.provider.base_url || "";
       }
       if (document.activeElement !== byId("provider-model")) {
-        text("provider-model", data.provider.model || "");
+        byId("provider-model").value = data.provider.model || "";
       }
       text("capabilities", data.capabilities.length ? data.capabilities.join(" · ") : "Нет");
       const c = data.counts;
