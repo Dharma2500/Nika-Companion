@@ -11,7 +11,7 @@ CREDENTIAL_TYPE_GENERIC = 1
 CREDENTIAL_PERSIST_LOCAL_MACHINE = 2
 PRIMARY_TARGET = "NikaCompanion/OpenAI/Primary"
 SECONDARY_TARGET = "NikaCompanion/OpenAI/Secondary"
-MAX_API_KEY_CHARS = 4096
+MAX_API_KEY_CHARS = 2048
 
 
 class CredentialStoreError(RuntimeError):
