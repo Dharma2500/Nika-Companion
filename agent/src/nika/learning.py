@@ -3,6 +3,7 @@
 This first learning layer handles direct remember/correction instructions and
 deduplicates exact repeats. It deliberately does not infer facts from ordinary
 conversation or silently promote assistant-generated text into verified memory.
+Uncertain semantic inferences must be handled by a separate reviewable learning stage.
 """
 
 from __future__ import annotations
