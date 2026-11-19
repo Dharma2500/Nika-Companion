@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _MIGRATION_1 = (
     """CREATE TABLE event_log (
@@ -86,6 +86,33 @@ _MIGRATION_2 = (
 )
 
 
+_MIGRATION_3 = (
+    """CREATE TABLE provider_usage (
+        usage_id TEXT PRIMARY KEY,
+        occurred_at TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        key_slot TEXT NOT NULL,
+        model TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+        output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+        cached_tokens INTEGER NOT NULL CHECK (cached_tokens >= 0),
+        reasoning_tokens INTEGER NOT NULL CHECK (reasoning_tokens >= 0),
+        total_tokens INTEGER NOT NULL CHECK (total_tokens >= 0)
+    )""",
+    "CREATE INDEX idx_provider_usage_occurred_at ON provider_usage (occurred_at)",
+    """CREATE TABLE learning_candidates (
+        candidate_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 6000),
+        source TEXT NOT NULL,
+        trigger_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending', 'approved', 'rejected'))
+    )""",
+    "CREATE INDEX idx_learning_candidates_status_created ON learning_candidates (status, created_at)",
+)
+
+
 class Database:
     """Owns the local SQLite database and its schema migrations."""
 
@@ -137,6 +164,11 @@ class Database:
                 for statement in _MIGRATION_2:
                     connection.execute(statement)
                 connection.execute("PRAGMA user_version = 2")
+
+            if current_version < 3:
+                for statement in _MIGRATION_3:
+                    connection.execute(statement)
+                connection.execute("PRAGMA user_version = 3")
 
     def health_check(self) -> bool:
         """Return whether SQLite can execute a basic integrity query."""
