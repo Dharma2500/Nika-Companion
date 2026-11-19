@@ -442,7 +442,6 @@ class OpenAIProviderManager:
         primary_key: str | None,
         secondary_key: str | None,
         settings: OpenAISettings,
-        *,
         base_url: str = "https://api.openai.com/v1",
     ) -> None:
         providers: dict[str, OpenAIResponsesProvider] = {}
