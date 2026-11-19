@@ -18,11 +18,11 @@ The project is built in small, testable layers. The local agent and persistent m
 | Area | Status |
 |---|---|
 | Python package skeleton | Initial implementation |
-| Local dashboard | Loopback-only authenticated dashboard; current generic Base URL/model editor is optional-provider groundwork. The target primary setup is two OpenAI API key slots stored in the Windows credential manager; secrets are never returned to the page. |
-| Persistent SQLite memory | Schema v2; provenance-aware MemoryStore, ConversationStore and bounded ContextBuilder implemented; legacy v1 records preserved. Local-first learning candidates, review and reusable skill learning are next. |
-| Model provider adapter | Current generic Chat Completions adapter is retained for optional LM Studio later. Primary OpenAI Responses API with key-1/key-2 quota-aware failover is planned; LM Studio is not being tested now. |
+| Local dashboard | Loopback-only authenticated dashboard with primary/secondary OpenAI password fields, credential save/delete, model and daily-token settings, connection test, redacted key status and usage counters. |
+| Persistent SQLite memory | Schema v3; provenance-aware memories, conversations, provider token usage and learning-candidate table. Explicit remember/correction commands are saved locally without API calls. |
+| Model provider adapter | OpenAI Responses API is primary, with primary/secondary Windows Credential Manager keys and quota-aware failover. Generic Chat Completions/LM Studio remains optional and untested. |
 | Local configuration | Environment-based, no secrets required |
-| Automated Python checks | GitHub Actions run #370: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 164 tests in each job; Ruff, compileall and source overlay passed |
+| Automated Python checks | Current branch CI is validating the dual-key, local-learning and dashboard milestone. Check latest GitHub Actions run before packaging; no release ZIP is built from a failed run. |
 | Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; current Fabric build #146 passed and produced the v0.5.1 JAR; v1/v2/v3 local persistence verified |
 | Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private chat with fail-closed offline handling; integration tests passed in all six Python CI jobs; in-game privacy acceptance remains |
 
@@ -77,11 +77,11 @@ After installing the project, run:
 .\\.venv\\Scripts\\python.exe -m nika.cli dashboard
 ~~~
 
-The command starts the local Python runtime if it is not already running, then opens the dashboard in your browser. The initial dashboard milestone was read-only. The current dashboard also configures non-secret provider settings and tests a live generation request. It shows runtime uptime, SQLite health/schema/counts, whether a provider is configured and the capabilities currently advertised by the local bridge. It does not show chat contents, API keys, runtime control tokens or bridge tokens.
+The command starts the local Python runtime if it is not already running, then opens the dashboard in your browser. The dashboard now accepts primary/secondary OpenAI keys via a native same-origin password form. Keys are stored in the Windows Credential Manager, not in provider.json or browser storage. Its explicit connection test consumes a small number of API tokens. It shows runtime uptime, SQLite health/schema/counts, whether a provider is configured and the capabilities currently advertised by the local bridge. It does not show chat contents, API keys, runtime control tokens or bridge tokens.
 
 The HTTP server binds only to 127.0.0.1 on an ephemeral local port. Browser entry uses a single-use ticket with a 60-second lifetime, exchanged for a one-hour HttpOnly; SameSite=Strict session cookie. The page has a nonce-based Content Security Policy and loads no external assets. The ticket is carried in the URL fragment and removed by the page after exchange. The dashboard does not store credentials in localStorage.
 
-The dashboard can save a non-secret Base URL and Model ID to NIKA_DATA/config/provider.json and test an actual generation request. API-key entry is still deferred; when added, secrets must use an OS-backed local credential store rather than Git or browser persistence. Close the browser tab when finished; stop the runtime separately with python -m nika.cli stop when you no longer need it.
+The optional advanced LM Studio pathway can save a non-secret Base URL and Model ID to NIKA_DATA/config/provider.json. It is not the primary provider and is not tested in this milestone. Close the browser tab when finished; stop the runtime separately with python -m nika.cli stop when you no longer need it.
 
 ## Repository layout
 
@@ -174,3 +174,15 @@ The canonical development handoff is maintained in [docs/CHAT_CONTEXT.md](docs/C
 ## Development
 
 Read docs/architecture.md before adding cross-component behavior. Record protocol changes and migrations deliberately. A passing CI run is required for a change to be considered verified.
+
+
+## Current OpenAI and local-learning implementation
+
+- Primary provider: OpenAI Responses API, default model gpt-6-luna with reasoning effort disabled, no tools, store=false and a 320-token normal reply ceiling.
+- Credentials: primary and secondary API keys live in the Windows Credential Manager. The local dashboard accepts both, can replace/remove each independently, and never returns key values to the page.
+- Failover: second key is used for quota exhaustion, authentication or permission errors. Ordinary 429 rate limits and malformed requests do not consume the reserve key.
+- Local economy: up to 8 recent messages, 4 relevant memories and an 8 KiB context; daily ceiling 60,000 total tokens by default; provider-reported input/output/cached/reasoning counts are recorded per key slot in SQLite schema v3.
+- Local learning: explicit "Ника, запомни: ..." and "Поправка: ..." commands are recorded as user_taught facts without an API call. Repeated explicit facts are deduplicated. Every private user turn is stored locally before provider availability is checked.
+- LM Studio remains an optional advanced OpenAI-compatible provider, not the primary provider. It is not configured or tested in this milestone.
+- Manual Windows acceptance with Vitaly's actual Credential Manager and OpenAI account remains outstanding. No credentials should be pasted into GitHub or this conversation.
+- Review/approve UI for inferred candidates, skill-learning/verification, monthly USD budget and emergency API disable are future work.
