@@ -460,6 +460,7 @@ class OpenAIProviderManager:
         with self._lock:
             self._providers = providers
             self._legacy_provider = None
+            self._settings = settings
             self._cooldown_until.clear()
             self._last_slot = "none"
 
