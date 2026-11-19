@@ -22,7 +22,7 @@ The project is built in small, testable layers. The local agent and persistent m
 | Persistent SQLite memory | Schema v3; provenance-aware memories, conversations, provider token usage and learning-candidate table. Explicit remember/correction commands are saved locally without API calls. |
 | Model provider adapter | OpenAI Responses API is primary, with primary/secondary Windows Credential Manager keys and quota-aware failover. Generic Chat Completions/LM Studio remains optional and untested. |
 | Local configuration | Environment-based, no secrets required |
-| Automated Python checks | Current branch CI is validating the dual-key, local-learning and dashboard milestone. Check latest GitHub Actions run before packaging; no release ZIP is built from a failed run. |
+| Automated Python checks | Python CI #433: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 185 tests in each job; Ruff, compileall and source overlay passed. |
 | Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; current Fabric build #146 passed and produced the v0.5.1 JAR; v1/v2/v3 local persistence verified |
 | Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private chat with fail-closed offline handling; integration tests passed in all six Python CI jobs; in-game privacy acceptance remains |
 
