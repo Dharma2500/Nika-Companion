@@ -493,13 +493,31 @@ This section supersedes the earlier "next development" sequence in section 16. I
 
 
 
-## 18. Final CI validation and source package for the current milestone (2026-11-19)
 
-- Final source head validated: f325bd0b1bdaff24b124b084f59e194df7366b3b.
-- Python CI #433, run 44596575853: all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; 185 tests passed in every matrix job; Ruff and compileall passed; source-overlay job passed.
-- Source-overlay artifact ID: 14566815689. This artifact is the source package from the exact head above and contains the handoff, README, roadmap, Python code, tests and tracked mod source.
-- Fabric build #217, run 44596575788, also succeeded. No Java or Fabric source changed in this milestone; do not send or replace the JAR.
-- The source overlay is packaged as Nika-Companion-Update.zip with relative repository paths at archive root. It intentionally excludes .venv and NIKA_DATA. SHA-256 of the exact extracted overlay ZIP: 2bbc04183d1899e92d2232ee1f97afabecacd759dfba5c0ad449f51cc3ee6132.
-- Repository branch remains feature/companion-renderer-v0.4.0, PR #1 open/draft/unmerged. Do not merge without explicit approval.
-- Manual Windows acceptance remains: Credential Manager save/read/delete, OpenAI test request with Vitaly's own key(s), private chat/ N toggle and local remember/correction flows. Keys must be typed only in the local dashboard, never into chat or GitHub.
-- Current implementation scope is not the full long-term learning system. Explicit remember/correction capture is implemented locally; inference review UI, reusable verified skills, monthly USD budget and emergency API disable remain future milestones.
+## 18. Final CI validation and package chain for the dual-key milestone (2026-11-19)
+
+### Code validation
+- Code source head: f325bd0b1bdaff24b124b084f59e194df7366b3b.
+- Python CI #433, run 44596575853: all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; 185 tests in every job; Ruff, compileall and source-overlay generation passed.
+- No Python/runtime source code changed after that code head. Later commits were documentation/handoff/README/PR synchronization only.
+- Fabric build #217, run 44597059394: success. No Java or Fabric source changed in this milestone, so do not send or replace the JAR.
+
+### Documentation/package verification
+- Python CI #437, run 44597059597, was run after the documentation synchronization at branch commit 6f3af9b8039cee993845f44bf4a36bdefd40525f. All six Python matrix jobs and source-overlay generation passed.
+- Source-overlay artifact from #437: ID 14566416589. It is superseded by a new documentation-only handoff correction committed after #437; use the newest successful Python CI/source-overlay workflow for the deliverable ZIP, not artifact #14566416589.
+- The intended user ZIP is a repackaged inner source-overlay ZIP with repository-relative paths at archive root. It excludes .venv and NIKA_DATA; preserve both user-local folders on extraction.
+
+### Current scope and acceptance
+- OpenAI Responses API primary; primary/secondary keys in Windows Credential Manager; quota/auth/permission-aware failover; token usage ledger and local daily limit; local explicit remember/correction capture.
+- LM Studio remains an optional untested alternative. Do not ask Vitaly to connect or test it.
+- Actual API key entry and live generation have not been tested against Vitaly's OpenAI account. Windows Credential Manager and private Minecraft chat still require manual acceptance on his PC.
+- Inferred memory review UI, verified reusable skills, monthly USD budget and emergency API disable remain future work.
+- Repository: Dharma2500/Nika-Companion; branch feature/companion-renderer-v0.4.0; PR #1 remains open/draft/unmerged. Do not merge without explicit approval.
+
+### Install after the newest verified ZIP is delivered
+1. Stop runtime: .\.venv\Scripts\python.exe -m nika.cli stop
+2. Extract ZIP directly over C:\Nika-Companion and overwrite tracked files. Preserve .venv and NIKA_DATA.
+3. Run .\.venv\Scripts\python.exe -m nika.cli dashboard
+4. Enter primary/secondary OpenAI keys in the dashboard and save. The values are stored in Windows Credential Manager and not shown again.
+5. Use the explicit low-output OpenAI connection test only when ready to make a small API request. No automatic API polling occurs.
+6. Use existing Minecraft JAR; no JAR update is included because Java source did not change.
