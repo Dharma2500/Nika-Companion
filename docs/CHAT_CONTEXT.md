@@ -449,3 +449,45 @@ This section supersedes earlier provider assumptions in this handoff and in the 
 - Organization/project usage, quota and spend-limit errors: https://help.openai.com/en/articles/6614457-troubleshooting-api-usage-and-spend-limits
 - Project keys, project-level budgets and rate limits: https://help.openai.com/en/articles/9186755-managing-projects-in-the-api-platform
 - Rate-limit errors vs billing/quota errors: https://help.openai.com/en/articles/5955604-troubleshooting-api-rate-limits-and-429-errors
+
+
+## 17. Implemented OpenAI dual-key + local-learning milestone (2026-11-19)
+
+This section supersedes the earlier "next development" sequence in section 16. It records the code now on the feature branch, not the remaining design wishlist.
+
+### Implemented code
+- Primary OpenAI client: agent/src/nika/openai_provider.py, official POST /v1/responses. Default model is gpt-6-luna; the request sets reasoning.effort=none, store=false, no tools, and a 320-token normal output ceiling. The explicit test request uses a 64-token output ceiling.
+- Dual credentials: agent/src/nika/credentials.py stores primary and secondary slots in the current Windows user's Credential Manager. Dashboard secrets are posted through a same-origin native HTML password form directly to the loopback runtime. No JavaScript reads them; the keys never go to provider.json, SQLite, Git or logs. The dashboard can replace or remove either key and displays only configured booleans and active slot.
+- Failover: key 1 is tried first, key 2 is tried only on quota exhaustion, authentication failure or permission/access error. Quota/auth/permission failures put the affected slot into a one-hour cooldown. HTTP 429 rate-limit responses are classified separately and do not spend the secondary key. Invalid request/model errors, network errors and server errors do not trigger key rotation.
+- Quota codes include insufficient_quota, credit_balance_exhausted, billing_hard_limit_reached, organization usage/spend limits and project spend limit. Two keys in one organization still share org-level quota.
+- Usage: agent/src/nika/usage.py and schema v3 table provider_usage store only model, selected key slot, timestamp and input/output/cached/reasoning/total token counts. They never store prompts, answers or credentials. Dashboard displays daily totals and a hard daily token ceiling (default 60,000 total tokens).
+- Token economy: agent/src/nika/context.py defaults to at most 8 recent messages, 4 relevant memories and an 8 KiB context object. Runtime applies a conservative local input-token estimate plus the output ceiling before a paid request. A request that would exceed the daily token ceiling is blocked locally.
+- Local learning: agent/src/nika/learning.py intercepts clear explicit "запомни ..." commands and Поправка:/Исправление:/Уточнение: messages. It writes them directly to SQLite as user_taught memories with confidence 1.0, without an API call. Repeated exact explicit facts/corrections are deduplicated. Ordinary text is not automatically promoted to durable knowledge.
+- Offline behavior: user messages are persisted before provider availability is checked. Explicit local learning commands still get a local reply with both OpenAI keys absent. Ordinary dialogue remains stored, but gets a truthful unavailable-provider response until a key is configured. Bridge advertises dialogue.chat so private chat can reach the local learning gate without an API key.
+- Optional LM Studio: the existing OpenAI-compatible Chat Completions adapter and Base URL/model section remain as an advanced alternative. It is not primary, not enabled by default, and was not tested during this milestone. Its non-secret config remains in NIKA_DATA/config/provider.json and is now loaded at startup.
+- Database schema: v3; adds provider_usage and learning_candidates while preserving schema v1/v2 content. Backups/restore migrate old schemas using the supported current schema version.
+- Minecraft mod: no Java source changed. Existing JAR remains the correct one; the bridge capability is now advertised by Python runtime.
+
+### Current limitations; do not claim these are done
+- Actual key entry and API generation have not been tested against Vitaly's real OpenAI account. Do not ask him to paste API keys into chat. He will enter them only in the local dashboard after installation.
+- Windows Credential Manager integration is covered by a fake-store test contract and CI, but still needs manual acceptance on Vitaly's Windows PC.
+- Automatic learning currently captures only explicit remember/correction commands. It does not yet summarize all conversations, infer preferences silently, expose an approve/reject memory review UI, or verify reusable skills.
+- learning_candidates table exists but review/create flows are not yet wired into the dashboard.
+- Daily token ceiling is implemented. Monthly USD budget, per-key spend display, exact USD cost estimate and emergency API-off switch are still future work. Token counts are recorded per key in SQLite.
+- The OpenAI connection test sends one small real request only when the user explicitly presses the dashboard test button. No test or periodic API calls happen automatically.
+- No JAR update is required unless Java source or bridge protocol changes later.
+
+### Test status / handoff
+- Python CI #423 (run 44595717972) completed all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs successfully. This includes the new OpenAI adapter, credential fake-store, usage ledger, local learning and corrected offline chat contract tests.
+- Later small dashboard/credential changes were in CI runs #424–#429. Verify the latest completed result for the current branch head before packaging the release ZIP.
+- Fabric build #210 (run 44595995862) succeeded; no Java source changed. No JAR is to be sent.
+- Repository: Dharma2500/Nika-Companion; branch: feature/companion-renderer-v0.4.0; PR #1 stays open, draft and unmerged. Do not merge without Vitaly's explicit approval.
+
+### Local install, when the verified ZIP is delivered
+1. Stop runtime: .\.venv\Scripts\python.exe -m nika.cli stop
+2. Extract the source overlay ZIP directly over C:\Nika-Companion, overwrite tracked files. Preserve .venv and NIKA_DATA; they are not in the ZIP.
+3. Start dashboard: .\.venv\Scripts\python.exe -m nika.cli dashboard
+4. Enter key 1 and key 2 in the dashboard and save. Keys are stored in Windows Credential Manager and are not displayed again.
+5. Set/keep model gpt-6-luna, daily token ceiling default 60,000. Press the explicit low-output connection test only when ready to spend a tiny amount of API usage.
+6. The existing Minecraft JAR is unchanged. Test private chat, public-chat N toggle, and explicit local commands such as "Ника, запомни: ..." before normal API dialogue.
+
