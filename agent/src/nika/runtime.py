@@ -48,7 +48,6 @@ from nika.observation import (
     decode_observation,
 )
 from nika.provider import (
-    OpenAICompatibleProvider,
     ProviderConfigurationError,
     ProviderError,
     ProviderManager,
