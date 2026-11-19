@@ -495,31 +495,33 @@ This section supersedes the earlier "next development" sequence in section 16. I
 
 
 
-## 18. Final CI validation and package chain for the dual-key milestone (2026-11-19)
 
-### Code validation
-- Final feature-branch source head: 167d52fcfcf2ba58d53175a32d733e649669ab01.
-- Python CI #439, run 44597701786: all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; 185 tests in every matrix job; Ruff and compileall passed; source-overlay generation passed.
-- Source-overlay artifact ID from #439: 14567210993. The user ZIP is built from its nested source-overlay archive with repository-relative paths at archive root. It excludes .venv and NIKA_DATA.
-- Fabric build #223, run 44597701458: success. No Java/Fabric source changed; the existing JAR remains correct and must not be replaced.
+## 18. Current validation and package state (2026-11-19)
 
-### Implemented scope
-- OpenAI Responses API is primary; key 1 primary and key 2 secondary, both stored in Windows Credential Manager. Failover is limited to quota exhaustion, authentication failure and permission/access failure. A transient HTTP 429 does not burn the reserve key.
-- GPT-6 Luna is the economical default with reasoning effort none, store=false, no tools and a 320 output-token normal request ceiling. Explicit test uses 64 output tokens.
-- SQLite schema v3 includes token usage ledger; daily token limit defaults to 60,000. Context assembly uses up to 8 recent messages, 4 relevant memories and an 8 KiB ceiling.
-- Explicit "запомни ..." and correction instructions are stored locally as user_taught memories without API calls; exact repeats are deduplicated. Normal conversation is persisted locally first but not automatically promoted to durable memory.
-- LM Studio remains optional and untested. Actual OpenAI key entry/live generation and Windows Credential Manager acceptance still need manual testing on Vitaly's PC.
-- Automatic inferred-memory review UI, verified reusable skills, monthly USD budget, per-key dollar cost and emergency API disable remain future tasks.
+### Implementation and tests
+- OpenAI dual-key/local-learning implementation head: 167d52fcfcf2ba58d53175a32d733e649669ab01. The only code change after initial CI #433 was an explanatory docstring in learning.py; no runtime behavior changed.
+- Python CI #439 (run 44597701786) validated that code head: all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed, 185 tests per matrix, Ruff and compileall passed; source-overlay job passed.
+- Python CI #440 (run 44598269934) validated the README and handoff synchronization after those docs were updated; all six matrix jobs, 185 tests each, and source-overlay job passed. Artifact ID 14567491259.
+- Current branch may receive only final handoff/documentation synchronization after #440; always package from the newest successful source-overlay run after those changes.
+- Fabric build #224 (run 44598269833) succeeded. No Java/Fabric source changed; v0.5.1 JAR remains current. Do not send or replace the JAR.
 
-### Repository state
-- Repository: Dharma2500/Nika-Companion; branch: feature/companion-renderer-v0.4.0.
+### Implemented behavior
+- OpenAI Responses API primary; OpenAI key 1 primary and key 2 secondary, stored in Windows Credential Manager. Secondary failover is limited to quota exhaustion, authentication failure and permission/access errors. Transient HTTP 429 does not burn key 2.
+- GPT-6 Luna default (gpt-6-luna), reasoning effort none, store=false, no tools, 320 output-token normal ceiling. Explicit provider test has 64-token output ceiling.
+- SQLite schema v3 includes provider usage. Default daily token ceiling 60,000. Context budget: 8 recent messages, 4 relevant memories, 8 KiB.
+- Explicit "запомни ..." and correction instructions are saved as local user_taught memories without API calls, with exact-repeat deduplication. All private user messages are persisted locally before provider availability is checked.
+- LM Studio stays optional and untested. It is not the primary provider.
+- Actual OpenAI key entry/live generation and Windows Credential Manager acceptance have not yet been tested on Vitaly's PC. Keys must only be entered in local dashboard, never pasted into chat/Git.
+- Inferred memory review UI, verified reusable skills, monthly USD budget and emergency API disable remain future work.
+
+### Installation
+1. Stop runtime: .venv/Scripts/python.exe -m nika.cli stop
+2. Extract the delivered ZIP directly over C:/Nika-Companion, overwriting tracked files. Preserve .venv and NIKA_DATA.
+3. Start the dashboard: .venv/Scripts/python.exe -m nika.cli dashboard
+4. Enter primary and secondary OpenAI keys in dashboard and save. Keys are stored in Windows Credential Manager and are not shown again.
+5. Use the explicit low-output OpenAI connection test when ready to make a small API request. No background API polling occurs.
+6. Keep the existing JAR; Java source did not change.
+
+### Repository
+- Repo: Dharma2500/Nika-Companion, branch feature/companion-renderer-v0.4.0.
 - PR #1 remains open/draft/unmerged. Do not merge without explicit user approval.
-- No actual OpenAI user key was used in CI or stored in Git.
-
-### Install
-1. Stop runtime: .\.venv\Scripts\python.exe -m nika.cli stop
-2. Extract the delivered ZIP directly over C:\Nika-Companion and overwrite tracked files. Preserve .venv and NIKA_DATA.
-3. Run .\.venv\Scripts\python.exe -m nika.cli dashboard
-4. Enter primary and secondary keys in the dashboard and save. The keys are stored in Windows Credential Manager and are never shown again.
-5. Run the explicit low-output OpenAI connection test when ready to make a small API request. No background API polling occurs.
-6. Keep the existing Minecraft JAR; Java source did not change.
