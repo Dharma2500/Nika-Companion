@@ -140,3 +140,18 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Fabric build #154 (run 44569289697) succeeded; artifact ID 14554765345. No mod/JAR update is needed for provider settings.
 - Current code head: 5d2d16726f80804ed13f4e92b8c92cc8f828e99f. PR #1 remains open/draft/unmerged. The Windows/manual test against Vitaly's real LM Studio endpoint remains.
 - Next user operation after the updated source ZIP: stop runtime, unzip directly over C:\Nika-Companion, preserve .venv and NIKA_DATA, run python -m nika.cli dashboard, enter the actual Base URL and Model ID, save, test connection, then return to Minecraft and verify the no-leak private-chat behavior.
+
+
+## 2026-11-19: authoritative correction to OpenAI + local learning architecture
+
+- Vitaly confirmed the intended provider topology: OpenAI API is primary; two keys are configured, key 1 is primary and key 2 is automatic failover when the primary's usable quota is exhausted/unavailable.
+- Keep LM Studio generic OpenAI-compatible pathway as optional future alternative. Do not set up a remote LM Studio PC and do not test LM Studio now.
+- Core product priority is local learning/memory. All dialogue, corrections, facts, outcomes and approved memories remain in NIKA_DATA/SQLite regardless of provider status. No continuous background API polling.
+- Learning means provenance-aware local memories, user preferences, project facts, corrections and verified reusable skills, not fine-tuning model weights after every chat.
+- "Remember" and straightforward corrections should be persisted locally without a model call; uncertain inferred memories become reviewable candidates; model-assisted extraction is sparse and only on meaningful learning signals.
+- API economy requirements: local request gate, compact relevant context, short recent tail/rolling summary, small number of retrieved memories, strict input/output limits, lower-cost routine model routing, explicit escalation, local request/cost ceilings and usage telemetry from provider response metadata.
+- New primary OpenAI adapter should use Responses API. The current generic Chat Completions adapter and generic endpoint/model dashboard are retained as optional LM Studio groundwork only; not the finished OpenAI setup.
+- Failover must classify quota exhaustion, rate limit, authentication, model/permission, malformed request and service/network failures separately. Never endlessly retry or waste the secondary key on a request-format error.
+- Important billing nuance: API credits belong to an API organization and are separate from ChatGPT subscription. Two keys in one organization do not create a second organization credit balance; project-level budgets/rate limits may differ but organization limits remain. A truly independent quota reserve generally requires a separately billed organization. Explain this without promising that two keys double token capacity.
+- No API keys have been pasted into chat or stored in the repository. Dashboard must set them locally using an OS-backed credential store; never expose keys back to page JavaScript or logs.
+- Documentation now records this decision as authoritative. Next implementation order: OpenAI Responses two-key manager and safe Windows credential store; cost gate and telemetry; then local-first memory learning/review.
