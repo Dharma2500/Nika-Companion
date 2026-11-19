@@ -53,6 +53,7 @@ from nika.provider import (
     ProviderError,
     ProviderManager,
     load_provider_config,
+    save_provider_config,
 )
 
 LOGGER = get_logger(__name__)
@@ -76,6 +77,17 @@ BRIDGE_MAX_TRACKED_NONCES = 4096
 DASHBOARD_TICKET_TTL_SECONDS = 60
 DASHBOARD_SESSION_TTL_SECONDS = 3600
 DASHBOARD_MAX_PENDING_TICKETS = 8
+
+
+def _reject_duplicate_json_properties(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON property.")
+        result[key] = value
+    return result
 
 
 def create_bridge_signature(
@@ -659,12 +671,10 @@ def serve(foreground: bool = False) -> None:
     conversation_store = ConversationStore(database)
     context_builder = ContextBuilder(conversation_store, memory_store)
     provider_manager = ProviderManager()
+    provider_config_path = settings.data_dir / "config" / "provider.json"
     try:
-        provider_config = load_provider_config()
-        if provider_config is not None:
-            provider_manager = ProviderManager(
-                OpenAICompatibleProvider(provider_config)
-            )
+        provider_config = load_provider_config(config_path=provider_config_path)
+        provider_manager.configure(provider_config)
     except ProviderConfigurationError:
         # Keep the local runtime and memory available; never log config values.
         LOGGER.error("runtime.provider_configuration_invalid")
@@ -711,6 +721,14 @@ def serve(foreground: bool = False) -> None:
                 for key in expired:
                     dashboard_sessions.pop(key, None)
                 return morsel.value in dashboard_sessions
+
+        def _dashboard_mutation_allowed(self) -> bool:
+            return (
+                self._dashboard_local_host()
+                and self._dashboard_session_valid()
+                and self.headers.get("Origin") == self._dashboard_origin()
+                and self.headers.get("Sec-Fetch-Site") == "same-origin"
+            )
 
         def _bridge_authorized(self) -> bool:
             return bridge_authenticator.verify(
@@ -805,7 +823,19 @@ def serve(foreground: bool = False) -> None:
                             "healthy": database_healthy,
                             "schema_version": SCHEMA_VERSION,
                         },
-                        "provider": {"configured": provider_manager.is_available},
+                        "provider": {
+                            "configured": provider_manager.is_available,
+                            "base_url": (
+                                provider_manager.config.base_url
+                                if provider_manager.config is not None
+                                else ""
+                            ),
+                            "model": (
+                                provider_manager.config.model
+                                if provider_manager.config is not None
+                                else ""
+                            ),
+                        },
                         "capabilities": [
                             "health.read",
                             "observation.submit",
@@ -877,6 +907,157 @@ def serve(foreground: bool = False) -> None:
             )
 
         def do_POST(self) -> None:
+            if self.path == "/dashboard/api/provider":
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                if not self._dashboard_session_valid():
+                    self._send(401, {"error": "dashboard_session_required"})
+                    return
+                if (
+                    self.headers.get("Origin") != self._dashboard_origin()
+                    or self.headers.get("Sec-Fetch-Site") != "same-origin"
+                ):
+                    self._send(403, {"error": "same_origin_required"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 4 or int(raw_length) > 4096:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                if self.headers.get("Transfer-Encoding") is not None:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                body = self.rfile.read(int(raw_length))
+                if len(body) != int(raw_length):
+                    self._send(400, {"error": "incomplete_request_body"})
+                    return
+                try:
+                    payload = json.loads(
+                        body.decode("utf-8"),
+                        object_pairs_hook=_reject_duplicate_json_properties,
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                    self._send(400, {"error": "invalid_provider_configuration"})
+                    return
+                if (
+                    not isinstance(payload, dict)
+                    or set(payload) != {"base_url", "model"}
+                    or not isinstance(payload["base_url"], str)
+                    or not isinstance(payload["model"], str)
+                ):
+                    self._send(400, {"error": "invalid_provider_configuration"})
+                    return
+                if (
+                    os.environ.get("NIKA_LLM_BASE_URL", "").strip()
+                    or os.environ.get("NIKA_LLM_MODEL", "").strip()
+                ):
+                    self._send(
+                        409,
+                        {
+                            "error": "provider_environment_override",
+                            "message": (
+                                "Настройки модели заданы переменными среды. "
+                                "Удали их, чтобы управлять подключением из панели."
+                            ),
+                        },
+                    )
+                    return
+                try:
+                    save_provider_config(
+                        provider_config_path,
+                        base_url=payload["base_url"],
+                        model=payload["model"],
+                    )
+                    provider_config = load_provider_config(
+                        config_path=provider_config_path
+                    )
+                    provider_manager.configure(provider_config)
+                except ProviderConfigurationError as error:
+                    self._send(
+                        400,
+                        {
+                            "error": "invalid_provider_configuration",
+                            "message": str(error),
+                        },
+                    )
+                    return
+                except OSError:
+                    self._send(
+                        500,
+                        {
+                            "error": "provider_configuration_write_failed",
+                            "message": "Не удалось сохранить настройки в NIKA_DATA.",
+                        },
+                    )
+                    return
+                current_config = provider_manager.config
+                self._send(
+                    200,
+                    {
+                        "saved": True,
+                        "provider": {
+                            "configured": current_config is not None,
+                            "base_url": current_config.base_url if current_config else "",
+                            "model": current_config.model if current_config else "",
+                        },
+                    },
+                )
+                return
+
+            if self.path == "/dashboard/api/provider/test":
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                if not self._dashboard_session_valid():
+                    self._send(401, {"error": "dashboard_session_required"})
+                    return
+                if (
+                    self.headers.get("Origin") != self._dashboard_origin()
+                    or self.headers.get("Sec-Fetch-Site") != "same-origin"
+                ):
+                    self._send(403, {"error": "same_origin_required"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 2 or int(raw_length) > 16:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                body = self.rfile.read(int(raw_length))
+                try:
+                    payload = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                if payload != {}:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                try:
+                    provider_manager.test_connection()
+                except ProviderError as error:
+                    self._send(
+                        502,
+                        {
+                            "error": "provider_test_failed",
+                            "message": str(error),
+                        },
+                    )
+                    return
+                self._send(200, {"ok": True})
+                return
+
             if self.path == "/dashboard/session/create":
                 if not self._dashboard_local_host() or not self._authorized():
                     self._send(403, {"error": "unauthorized"})
