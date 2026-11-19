@@ -22,15 +22,15 @@ The project is built in small, testable layers. The local agent and persistent m
 | Persistent SQLite memory | Schema v3; provenance-aware memories, conversations, provider token usage and learning-candidate table. Explicit remember/correction commands are saved locally without API calls. |
 | Model provider adapter | OpenAI Responses API is primary, with primary/secondary Windows Credential Manager keys and quota-aware failover. Generic Chat Completions/LM Studio remains optional and untested. |
 | Local configuration | Environment-based, no secrets required |
-| Automated Python checks | Python CI #439: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 185 tests in each job; Ruff, compileall and source overlay passed. |
-| Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; current Fabric build #146 passed and produced the v0.5.1 JAR; v1/v2/v3 local persistence verified |
+| Automated Python checks | Python CI #440: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 185 tests in each job; Ruff, compileall and source overlay passed. |
+| Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; latest Fabric client build #224 passed; Java source has not changed since v0.5.1; v1/v2/v3 local persistence verified |
 | Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private chat with fail-closed offline handling; integration tests passed in all six Python CI jobs; in-game privacy acceptance remains |
 
 
 
 Latest verified workflows:
-- [Fabric build #223](https://github.com/Dharma2500/Nika-Companion/actions/runs/44597701458) — successful. No Java source changed; the existing JAR remains current.
-- [Python CI #439](https://github.com/Dharma2500/Nika-Companion/actions/runs/44597701786) — all six Ubuntu/Windows × Python 3.11–3.13 jobs and the source-overlay job successful; 185 tests passed in each job, Ruff and compileall passed. Source overlay artifact ID `14567210993`.
+- [Fabric build #224](https://github.com/Dharma2500/Nika-Companion/actions/runs/44598269833) — successful. No Java source changed; the existing JAR remains current.
+- [Python CI #440](https://github.com/Dharma2500/Nika-Companion/actions/runs/44598269934) — all six Ubuntu/Windows × Python 3.11–3.13 jobs and the source-overlay job successful; 185 tests passed in each job, Ruff and compileall passed. Source overlay artifact ID `14567491259`.
 
 ## Quick start
 
@@ -67,7 +67,7 @@ python -m nika.cli doctor
 
 ## Learning and API economy
 
-Nika's durable memory belongs to the local Python Core and SQLite database, not the OpenAI provider. The target design stores conversations, corrections, user-taught facts and verified reusable skills locally. Explicit memory operations and local retrieval must not call the API. OpenAI is called only when a user request needs generation or reasoning that local memory and deterministic logic cannot provide. Two OpenAI key slots are implemented (primary and secondary failover); explicit remember/correction commands are stored locally without API calls. LM Studio remains an optional, untested alternative. API credentials must be stored in the Windows OS credential manager, never in Git, SQLite, logs or browser storage.
+Nika's durable memory belongs to the local Python Core and SQLite database, not the OpenAI provider. The implemented local-first layer stores conversations, explicit corrections and user-taught facts locally; verified reusable skills remain a future milestone. Explicit memory operations and local retrieval must not call the API. OpenAI is called only when a user request needs generation or reasoning that local memory and deterministic logic cannot provide. Two OpenAI key slots are implemented (primary and secondary failover); explicit remember/correction commands are stored locally without API calls. LM Studio remains an optional, untested alternative. API credentials must be stored in the Windows OS credential manager, never in Git, SQLite, logs or browser storage.
 
 ## Local dashboard
 
