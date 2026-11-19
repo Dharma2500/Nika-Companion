@@ -23,9 +23,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
+from urllib.parse import parse_qs
 from urllib.request import Request, urlopen
 
 from nika.config import Settings
+from nika.credentials import CredentialStoreError, create_credential_store
 from nika.context import ContextBuilder, ContextBuildError
 from nika.dashboard import render_dashboard
 from nika.database import SCHEMA_VERSION, Database
@@ -35,6 +37,7 @@ from nika.dialogue import (
     decode_chat_request,
 )
 from nika.event_store import EventStore, NewEvent
+from nika.learning import LearningStore, LocalLearningEngine
 from nika.logging_setup import get_logger, setup_logging
 from nika.memory import (
     ConversationStore,
@@ -42,6 +45,7 @@ from nika.memory import (
     MemoryValidationError,
     MessageInput,
 )
+from nika.openai_provider import OpenAIProviderManager, OpenAISettings, load_openai_settings, save_openai_settings
 from nika.observation import (
     MAX_OBSERVATION_BYTES,
     ObservationValidationError,
@@ -54,6 +58,7 @@ from nika.provider import (
     load_provider_config,
     save_provider_config,
 )
+from nika.usage import UsageStore
 
 LOGGER = get_logger(__name__)
 
@@ -669,14 +674,38 @@ def serve(foreground: bool = False) -> None:
     memory_store = MemoryStore(database)
     conversation_store = ConversationStore(database)
     context_builder = ContextBuilder(conversation_store, memory_store)
-    provider_manager = ProviderManager()
-    provider_config_path = settings.data_dir / "config" / "provider.json"
+    learning_store = LearningStore(database)
+    learning_engine = LocalLearningEngine(memory_store, learning_store)
+    usage_store = UsageStore(database)
+
+    # OpenAI is the primary provider. Secrets are read only from the OS credential store.
+    openai_settings_path = settings.data_dir / "config" / "openai.json"
     try:
-        provider_config = load_provider_config(config_path=provider_config_path)
-        provider_manager.configure(provider_config)
+        openai_settings = load_openai_settings(openai_settings_path)
     except ProviderConfigurationError:
-        # Keep the local runtime and memory available; never log config values.
-        LOGGER.error("runtime.provider_configuration_invalid")
+        openai_settings = OpenAISettings()
+        LOGGER.error("runtime.openai_settings_invalid")
+    openai_manager = OpenAIProviderManager()
+    credential_store = None
+    try:
+        credential_store = create_credential_store()
+        primary_key = credential_store.get_secret("primary")
+        secondary_key = credential_store.get_secret("secondary")
+        openai_manager.configure(
+            primary_key=primary_key,
+            secondary_key=secondary_key,
+            settings=openai_settings,
+        )
+    except CredentialStoreError:
+        credential_store = None
+        LOGGER.warning("runtime.credential_store_unavailable")
+
+    # Retain the generic Chat Completions adapter as an optional LM Studio path.
+    legacy_provider_manager = ProviderManager()
+    try:
+        legacy_provider_manager.configure(load_provider_config())
+    except ProviderConfigurationError:
+        LOGGER.error("runtime.legacy_provider_configuration_invalid")
     chat_request_lock = threading.Lock()
     dashboard_auth_lock = threading.Lock()
     dashboard_tickets: dict[str, float] = {}
