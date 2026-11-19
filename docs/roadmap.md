@@ -78,13 +78,14 @@ Work proceeds by verified milestones. A milestone is not complete until its test
 Design baseline: `docs/memory-dialogue-design.md`.
 
 - [x] Database schema migration v2: conversations, conversation messages, memory provenance and world scope (v1 records preserved)
+- [x] Database schema migration v3: provider token-usage ledger and local learning-candidate table (v1/v2 records preserved)
 - [x] Typed ConversationStore API with idempotent message writes
 - [x] Typed MemoryStore API: add/get/search/list with confidence, provenance and scope validation
 - [x] Deterministic ContextBuilder: personality, recent turns, relevant memories and hard context budget (world context intentionally omitted until freshness/scope checks exist)
 - [ ] Stable Nika personality constitution and truthful fallback behavior
 - [x] Provider interface and OpenAI-compatible adapter with explicit environment configuration, timeouts, response bounds and fake-server tests
-- [ ] Implement OpenAI Responses API as the primary provider; retain generic Chat Completions/LM Studio only as an optional untested alternative
-- [ ] Implement primary/secondary OpenAI key slots, quota-aware failover, error classification, budgets, usage telemetry and graceful degradation
+- [x] Implement OpenAI Responses API as the primary provider; retain generic Chat Completions/LM Studio only as an optional untested alternative
+- [x] Implement primary/secondary OpenAI key slots, quota-aware failover, error classification, daily token ceiling, usage telemetry and graceful degradation
 - [x] Authenticated `POST /bridge/v1/chat` endpoint with strict schema, 16 KiB payload bound, HMAC/replay protection and request-id idempotency
 - [x] Plain-text Minecraft chat routing: no `/nika ask`, no per-message prefix
   - [x] Local Nika-chat mode enabled when the companion is summoned
@@ -94,11 +95,13 @@ Design baseline: `docs/memory-dialogue-design.md`.
   - [x] Show routing state; when bridge/provider is unavailable in private mode, block ordinary text locally and show a warning; public server chat requires an explicit N toggle
   - [x] Display user echo and assistant replies only in the local client chat
 - [ ] Verify in Minecraft 1.21.11: private message/reply never reaches server, N toggle works, slash passthrough, provider-offline local blocking and explicit public switch, repeated messages and chat-mode behavior during world transitions
-- [ ] Local-first learning loop: auto-capture explicit remember/correction signals, queue uncertain candidates, review/edit/approve/reject memories, and never silently verify model-generated claims
+- [x] Capture explicit remember/correction commands locally as user_taught facts without API calls; deduplicate repeated facts
+- [ ] Add automatic candidate detection for uncertain inferred knowledge plus local review/edit/approve/reject UI
 - [ ] Versioned skill episodes with prerequisites, procedure, success/failure outcome, provenance and user-confirmed promotion
 
-- [ ] Add local token/cost controller: local-only request gate, compact context assembly, input/output caps, routine/complex model routing, per-request and daily/monthly spend limits, usage dashboard and emergency disable.
-- [ ] Ensure all memory reads/writes, memory retrieval, status, idle loops and Minecraft event ingestion remain local and never call OpenAI.
+- [x] Add local token gate: compact context (8 recent messages, 4 memories, 8 KiB), 320-token output ceiling, 60,000-token daily ceiling and provider usage ledger/dashboard.
+- [ ] Add routine/complex model routing, per-request cost ceilings, monthly USD budgets and emergency API disable.
+- [x] Keep explicit memory writes, memory retrieval, status and Minecraft event ingestion local; no idle or tick-based API calls.
 
 ## Phase 4: safe autonomy
 
@@ -117,9 +120,9 @@ Design baseline: `docs/memory-dialogue-design.md`.
   - [x] Validate Host/Origin, use a nonce-based CSP, and return no runtime/bridge/API secrets to the page
   - [x] Add CLI command 'nika dashboard'; start the runtime when needed and launch the browser
   - [x] Cover unauthenticated access, same-origin exchange, ticket replay, redacted status and CLI launch with tests
-- [ ] Verify the dashboard launch and visual layout manually on Vitaly's Windows machine
-- [x] Add generic non-secret Base URL/model settings as optional-provider groundwork (not the final OpenAI setup)
-- [ ] Add two OpenAI key fields (primary and secondary) stored with a Windows OS-backed credential manager; secrets must never be returned to browser JavaScript
+- [ ] Verify the dashboard launch, Windows Credential Manager save/read/delete, and OpenAI API connection manually on Vitaly's Windows machine
+- [x] Keep generic non-secret Base URL/model settings as optional LM Studio pathway; do not test or activate by default
+- [x] Add two OpenAI key fields (primary and secondary) stored with Windows Credential Manager; secrets are never returned to browser JavaScript
 - [ ] Add bounded diagnostics and safe runtime controls with explicit confirmation for stop/restart
 - [ ] Memory review and correction tools
 - [ ] Voice input/output (only after text dialogue and memory pass acceptance)
