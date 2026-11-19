@@ -83,8 +83,8 @@ Design baseline: `docs/memory-dialogue-design.md`.
 - [x] Deterministic ContextBuilder: personality, recent turns, relevant memories and hard context budget (world context intentionally omitted until freshness/scope checks exist)
 - [ ] Stable Nika personality constitution and truthful fallback behavior
 - [x] Provider interface and OpenAI-compatible adapter with explicit environment configuration, timeouts, response bounds and fake-server tests
-- [ ] Verify an OpenAI-compatible local LM Studio endpoint and actual model ID on the PC running the Nika runtime
-- [ ] Complete provider manager with budgets, failover/rotation, diagnostics and graceful degradation
+- [ ] Implement OpenAI Responses API as the primary provider; retain generic Chat Completions/LM Studio only as an optional untested alternative
+- [ ] Implement primary/secondary OpenAI key slots, quota-aware failover, error classification, budgets, usage telemetry and graceful degradation
 - [x] Authenticated `POST /bridge/v1/chat` endpoint with strict schema, 16 KiB payload bound, HMAC/replay protection and request-id idempotency
 - [x] Plain-text Minecraft chat routing: no `/nika ask`, no per-message prefix
   - [x] Local Nika-chat mode enabled when the companion is summoned
@@ -94,8 +94,11 @@ Design baseline: `docs/memory-dialogue-design.md`.
   - [x] Show routing state; when bridge/provider is unavailable in private mode, block ordinary text locally and show a warning; public server chat requires an explicit N toggle
   - [x] Display user echo and assistant replies only in the local client chat
 - [ ] Verify in Minecraft 1.21.11: private message/reply never reaches server, N toggle works, slash passthrough, provider-offline local blocking and explicit public switch, repeated messages and chat-mode behavior during world transitions
-- [ ] Explicit memory teaching/review flow; no silent automatic promotion of every model statement
-- [ ] Versioned skill format and user demonstration capture
+- [ ] Local-first learning loop: auto-capture explicit remember/correction signals, queue uncertain candidates, review/edit/approve/reject memories, and never silently verify model-generated claims
+- [ ] Versioned skill episodes with prerequisites, procedure, success/failure outcome, provenance and user-confirmed promotion
+
+- [ ] Add local token/cost controller: local-only request gate, compact context assembly, input/output caps, routine/complex model routing, per-request and daily/monthly spend limits, usage dashboard and emergency disable.
+- [ ] Ensure all memory reads/writes, memory retrieval, status, idle loops and Minecraft event ingestion remain local and never call OpenAI.
 
 ## Phase 4: safe autonomy
 
@@ -115,8 +118,8 @@ Design baseline: `docs/memory-dialogue-design.md`.
   - [x] Add CLI command 'nika dashboard'; start the runtime when needed and launch the browser
   - [x] Cover unauthenticated access, same-origin exchange, ticket replay, redacted status and CLI launch with tests
 - [ ] Verify the dashboard launch and visual layout manually on Vitaly's Windows machine
-- [x] Add non-secret provider URL/model settings and a real generation connection test
-- [ ] Add API credential storage near the end of the dashboard work, using an OS-backed local secret store; never expose secret values to browser JavaScript
+- [x] Add generic non-secret Base URL/model settings as optional-provider groundwork (not the final OpenAI setup)
+- [ ] Add two OpenAI key fields (primary and secondary) stored with a Windows OS-backed credential manager; secrets must never be returned to browser JavaScript
 - [ ] Add bounded diagnostics and safe runtime controls with explicit confirmation for stop/restart
 - [ ] Memory review and correction tools
 - [ ] Voice input/output (only after text dialogue and memory pass acceptance)
