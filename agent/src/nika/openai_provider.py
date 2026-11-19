@@ -410,7 +410,7 @@ class OpenAIResponsesProvider:
 class OpenAIProviderManager:
     """Use key 1 first, then key 2 only for key/quota failures."""
 
-    _FAILOVER_KINDS = frozenset({"quota", "rate_limit", "authentication", "permission"})
+    _FAILOVER_KINDS = frozenset({"quota", "authentication", "permission"})
 
     def __init__(self) -> None:
         self._providers: dict[str, OpenAIResponsesProvider] = {}
