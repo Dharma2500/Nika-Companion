@@ -482,8 +482,6 @@ class OpenAIProviderManager:
                 "Оба ключа OpenAI временно отключены из-за квоты или ошибки доступа.",
                 kind="quota",
             )
-        if order[0] == "secondary" and "primary" in providers:
-            order.append("primary")
         last_error: ProviderError | None = None
         for index, slot in enumerate(order):
             try:
