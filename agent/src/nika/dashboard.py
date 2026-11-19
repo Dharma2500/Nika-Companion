@@ -183,7 +183,7 @@ def render_dashboard(nonce: str) -> bytes:
           <label class="field" for="openai-model">
             Модель для обычного общения
             <input id="openai-model" name="model" type="text" maxlength="160"
-              value="gpt-4.1-mini" autocomplete="off" spellcheck="false">
+              value="gpt-6-luna" autocomplete="off" spellcheck="false">
           </label>
           <label class="field" for="openai-daily-limit">
             Лимит токенов в сутки
@@ -283,7 +283,7 @@ def render_dashboard(nonce: str) -> bytes:
         " · Активный: " + (openai.active_slot || "нет")
       );
       if (document.activeElement !== byId("openai-model")) {
-        byId("openai-model").value = openai.model || "gpt-4.1-mini";
+        byId("openai-model").value = openai.model || "gpt-6-luna";
       }
       if (document.activeElement !== byId("openai-daily-limit")) {
         byId("openai-daily-limit").value = openai.daily_token_limit || 60000;
