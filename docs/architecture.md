@@ -311,3 +311,17 @@ Nika is a memory-first companion. OpenAI is the main language/reasoning provider
 6. Consolidate long conversations in batches only when a threshold or user action calls for it, never by polling the model continuously.
 
 This learning loop changes structured memory and skills, not model weights. It must remain useful with both API keys disabled.
+
+
+## Implemented OpenAI dual-key and local learning runtime (2026-11-19)
+
+- The primary provider is agent/src/nika/openai_provider.py using the official Responses API. Default model gpt-6-luna; reasoning effort none; store false; no tools; 320 output-token normal request cap.
+- The optional generic Chat Completions adapter in agent/src/nika/provider.py is retained for future LM Studio use. It is not the primary provider and is not tested in this milestone.
+- Primary and secondary API key slots are stored with the current Windows user's Credential Manager using agent/src/nika/credentials.py. The browser submits a native same-origin password form to the loopback runtime. Key strings are never returned to dashboard JavaScript or persisted in repository files/SQLite/logs.
+- Failover to key 2 happens on classified quota exhaustion, authentication failure or permission/access error. Transient HTTP 429 rate limiting does not burn the secondary key. Invalid request/model errors do not trigger failover. Cooldowns are bounded and visible as status only.
+- The default local context is 8 recent messages, 4 relevant memories and an 8 KiB assembled context. Runtime enforces a conservative estimated-input plus configured-output daily token ceiling (default 60,000 total tokens).
+- The Responses API usage object is stored in SQLite schema v3 provider_usage with model, key slot, input/output/cached/reasoning/total token counts. No prompt, response body or key material is stored in this table.
+- LocalLearningEngine handles explicit "запомни ..." and correction phrases as local writes to MemoryStore with user_taught provenance and confidence 1.0. Exact repeats are deduplicated. No API request is made for these operations.
+- Runtime persists every user message before checking whether a provider is available. This preserves a private learning trail if no API key is configured or both keys are unavailable. The bridge advertises dialogue.chat so explicit local memory commands can be delivered without paid API access.
+- Current automatic learning is intentionally narrow and deterministic. Uncertain candidate review UI and verified reusable skill episodes are not implemented yet.
+- Manual Windows acceptance using the actual Credential Manager and OpenAI account remains required. The CI fake endpoints do not test Vitaly's real keys or spend.
