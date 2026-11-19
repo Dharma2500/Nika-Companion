@@ -131,14 +131,7 @@ and confidence labels. It enforces a hard UTF-8 byte budget. Until a freshness
 and world-scope contract is implemented, its `world_context` field is null.
 It must never present stale observations as current world state.
 
-The provider adapter in `nika.provider` speaks OpenAI-compatible
-`/chat/completions` using only the Python standard library. It reads
-`NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL` and optional `NIKA_LLM_API_KEY`; no
-host or model is hard-coded. Requests and responses have strict size limits,
-timeouts and sanitized error handling. Fake local-server tests verify the
-protocol shape. This does not mean a real model is configured: the actual
-LM Studio endpoint and model ID must be checked on the PC running the Nika
-runtime before use.
+The current nika.provider Chat Completions adapter is generic OpenAI-compatible groundwork. It is retained for the optional future LM Studio pathway, not as the primary OpenAI integration. The confirmed primary provider is the official OpenAI Responses API with primary and secondary credential slots stored by an OS-backed secret store.
 
 The authenticated `POST /bridge/v1/chat` route is implemented. It
 accepts strict schema v1 with a 16 KiB transport bound and a 4,000-character
@@ -287,3 +280,34 @@ Provider URL/model configuration may be stored as local non-secret settings in
 a later milestone. API credentials are deliberately postponed and must be
 stored in an OS-backed credential store; a future browser UI may submit a
 secret once but must never read it back or put it in browser persistence.
+
+
+## Nika learning and OpenAI provider policy (authoritative decision, 2026-11-19)
+
+Nika is a memory-first companion. OpenAI is the main language/reasoning provider, not a background process and not the memory database.
+
+### Provider topology
+- Primary runtime provider: official OpenAI Responses API.
+- Credential slots: OpenAI key 1 (primary) and OpenAI key 2 (secondary failover), stored only by an OS-backed local credential store. UI status may expose configured/healthy/degraded state and a masked suffix, never the secret.
+- Provider failover is error-aware. Billing/quota exhaustion may switch immediately to key 2. Transient rate limiting gets bounded backoff and retry; network/5xx faults use bounded retry/circuit-breaker logic. Authentication failure marks the affected key unhealthy and alerts locally. Invalid request/model/permission errors must not trigger an endless retry loop.
+- Keep the existing generic OpenAI-compatible Chat Completions adapter as an optional LM Studio pathway. It is not the default provider. Keep its configuration available as an advanced alternative, but do not test or activate LM Studio in the current OpenAI integration milestone.
+- If both keys belong to one OpenAI organization, they share organization-level credits/limits. Project-specific controls can differ by project, while organization-level controls still apply. A second key only provides quota failover when its billing/limit scope actually has remaining capacity; a genuinely independent reserve generally requires another organization/billing scope.
+- Treat rate limits and exhausted credits/spending limits as different failure classes. Retrying a billing/quota error does not restore access. Never claim that two keys double the quota automatically.
+
+### Token and cost controller
+- Build a local request gate before any provider call. Memory lookup, memory writes, chat persistence, known status, deduplicated local operations and deterministic procedures must not call OpenAI.
+- Do not send every Minecraft event or background observation to a model. Persist permitted events locally, aggregate/deduplicate locally and request analysis only on an explicit user interaction or a deliberate threshold.
+- Assemble minimal context: stable reusable instructions, short recent conversation context / rolling summary, and only relevant memories. The complete SQLite transcript is never attached to every request.
+- Bound model output, reasoning effort and input context. Use a lower-cost default model for routine dialogue; allow explicit escalation for complex tasks. Do not invoke web search/tools unless requested or needed.
+- Keep stable prompt prefixes and use provider prompt caching where available. Respect per-model token accounting and pricing; report actual usage returned by the API rather than estimating from character counts alone.
+- Add local daily/monthly spend limits and a per-request token ceiling. On limit, stop paid calls gracefully while local memory and supported deterministic functions continue working.
+
+### Learning loop
+1. Persist the user/assistant conversation locally, regardless of API availability.
+2. Detect explicit learning instructions and corrections locally first.
+3. Save unambiguous user-taught facts directly; stage inferred or uncertain learning as reviewable candidates.
+4. Record procedures with prerequisites, steps, result, version/scope and known failure modes. Promote reusable skills only after confirmation or repeatable evidence.
+5. Retrieve relevant approved memory locally for future turns.
+6. Consolidate long conversations in batches only when a threshold or user action calls for it, never by polling the model continuously.
+
+This learning loop changes structured memory and skills, not model weights. It must remain useful with both API keys disabled.
