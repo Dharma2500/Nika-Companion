@@ -686,6 +686,12 @@ def serve(foreground: bool = False) -> None:
         openai_settings = OpenAISettings()
         LOGGER.error("runtime.openai_settings_invalid")
     openai_manager = OpenAIProviderManager()
+    openai_manager.configure(
+        primary_key=None,
+        secondary_key=None,
+        settings=openai_settings,
+    )
+    provider_config_path = settings.data_dir / "config" / "provider.json"
     credential_store = None
     try:
         credential_store = create_credential_store()
