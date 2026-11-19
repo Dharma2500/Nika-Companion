@@ -491,3 +491,15 @@ This section supersedes the earlier "next development" sequence in section 16. I
 5. Set/keep model gpt-6-luna, daily token ceiling default 60,000. Press the explicit low-output connection test only when ready to spend a tiny amount of API usage.
 6. The existing Minecraft JAR is unchanged. Test private chat, public-chat N toggle, and explicit local commands such as "Ника, запомни: ..." before normal API dialogue.
 
+
+
+## 18. Final CI validation and source package for the current milestone (2026-11-19)
+
+- Final source head validated: f325bd0b1bdaff24b124b084f59e194df7366b3b.
+- Python CI #433, run 44596575853: all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; 185 tests passed in every matrix job; Ruff and compileall passed; source-overlay job passed.
+- Source-overlay artifact ID: 14566815689. This artifact is the source package from the exact head above and contains the handoff, README, roadmap, Python code, tests and tracked mod source.
+- Fabric build #217, run 44596575788, also succeeded. No Java or Fabric source changed in this milestone; do not send or replace the JAR.
+- The source overlay is packaged as Nika-Companion-Update.zip with relative repository paths at archive root. It intentionally excludes .venv and NIKA_DATA. SHA-256 of the exact extracted overlay ZIP: 2bbc04183d1899e92d2232ee1f97afabecacd759dfba5c0ad449f51cc3ee6132.
+- Repository branch remains feature/companion-renderer-v0.4.0, PR #1 open/draft/unmerged. Do not merge without explicit approval.
+- Manual Windows acceptance remains: Credential Manager save/read/delete, OpenAI test request with Vitaly's own key(s), private chat/ N toggle and local remember/correction flows. Keys must be typed only in the local dashboard, never into chat or GitHub.
+- Current implementation scope is not the full long-term learning system. Explicit remember/correction capture is implemented locally; inference review UI, reusable verified skills, monthly USD budget and emergency API disable remain future milestones.
