@@ -776,6 +776,22 @@ def serve(foreground: bool = False) -> None:
             self.end_headers()
             self.wfile.write(body)
 
+        def _dashboard_redirect(self, notice: str) -> None:
+            allowed = {
+                "saved",
+                "cleared",
+                "test_ok",
+                "test_failed",
+                "no_keys",
+                "credential_store_unavailable",
+            }
+            selected = notice if notice in allowed else "saved"
+            self.send_response(303)
+            self.send_header("Location", f"/dashboard/?notice={selected}")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+
         def do_GET(self) -> None:
             if self.path in {"/dashboard", "/dashboard/"}:
                 if not self._dashboard_local_host():
@@ -958,6 +974,139 @@ def serve(foreground: bool = False) -> None:
             )
 
         def do_POST(self) -> None:
+            if self.path == "/dashboard/api/openai-credentials":
+                if not self._dashboard_mutation_allowed():
+                    self._send(403, {"error": "same_origin_session_required"})
+                    return
+                if credential_store is None:
+                    self._dashboard_redirect("credential_store_unavailable")
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != (
+                    "application/x-www-form-urlencoded"
+                ):
+                    self._send(415, {"error": "form_urlencoded_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 5 or int(raw_length) > 12_000:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                if self.headers.get("Transfer-Encoding") is not None:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                body = self.rfile.read(int(raw_length))
+                if len(body) != int(raw_length):
+                    self._send(400, {"error": "incomplete_request_body"})
+                    return
+                try:
+                    form = parse_qs(
+                        body.decode("utf-8"),
+                        keep_blank_values=True,
+                        strict_parsing=False,
+                        max_num_fields=8,
+                    )
+                except (UnicodeDecodeError, ValueError):
+                    self._send(400, {"error": "invalid_openai_settings_form"})
+                    return
+                allowed_fields = {
+                    "action",
+                    "primary_key",
+                    "secondary_key",
+                    "model",
+                    "daily_token_limit",
+                }
+                if set(form) - allowed_fields or any(len(values) != 1 for values in form.values()):
+                    self._send(400, {"error": "invalid_openai_settings_form"})
+                    return
+
+                action = form.get("action", [""])[0]
+                if action not in {"save", "clear_primary", "clear_secondary", "test"}:
+                    self._send(400, {"error": "invalid_openai_settings_action"})
+                    return
+
+                try:
+                    if action == "save":
+                        primary_value = form.get("primary_key", [""])[0]
+                        secondary_value = form.get("secondary_key", [""])[0]
+                        if primary_value:
+                            credential_store.set_secret("primary", primary_value)
+                        if secondary_value:
+                            credential_store.set_secret("secondary", secondary_value)
+                        model_value = form.get("model", [openai_settings.model])[0]
+                        limit_value = form.get(
+                            "daily_token_limit",
+                            [str(openai_settings.daily_token_limit)],
+                        )[0]
+                        daily_limit = int(limit_value)
+                        updated_settings = OpenAISettings(
+                            model=model_value,
+                            max_output_tokens=openai_settings.max_output_tokens,
+                            daily_token_limit=daily_limit,
+                        )
+                        save_openai_settings(openai_settings_path, updated_settings)
+                        openai_settings = updated_settings
+                        primary_key = credential_store.get_secret("primary")
+                        secondary_key = credential_store.get_secret("secondary")
+                        if not primary_key and not secondary_key:
+                            self._dashboard_redirect("no_keys")
+                            return
+                        openai_manager.configure(
+                            primary_key=primary_key,
+                            secondary_key=secondary_key,
+                            settings=openai_settings,
+                        )
+                        self._dashboard_redirect("saved")
+                        return
+
+                    if action == "clear_primary":
+                        credential_store.delete_secret("primary")
+                        primary_key = credential_store.get_secret("primary")
+                        secondary_key = credential_store.get_secret("secondary")
+                        openai_manager.configure(
+                            primary_key=primary_key,
+                            secondary_key=secondary_key,
+                            settings=openai_settings,
+                        )
+                        self._dashboard_redirect("cleared")
+                        return
+
+                    if action == "clear_secondary":
+                        credential_store.delete_secret("secondary")
+                        primary_key = credential_store.get_secret("primary")
+                        secondary_key = credential_store.get_secret("secondary")
+                        openai_manager.configure(
+                            primary_key=primary_key,
+                            secondary_key=secondary_key,
+                            settings=openai_settings,
+                        )
+                        self._dashboard_redirect("cleared")
+                        return
+
+                    result = openai_manager.test_connection()
+                    usage_store.record(
+                        provider="openai",
+                        key_slot=result.key_slot,
+                        model=result.usage.model,
+                        input_tokens=result.usage.input_tokens,
+                        output_tokens=result.usage.output_tokens,
+                        cached_tokens=result.usage.cached_tokens,
+                        reasoning_tokens=result.usage.reasoning_tokens,
+                    )
+                    self._dashboard_redirect("test_ok")
+                    return
+                except (CredentialStoreError, ProviderConfigurationError, ValueError):
+                    self._dashboard_redirect("credential_store_unavailable")
+                    return
+                except ProviderError:
+                    self._dashboard_redirect("test_failed")
+                    return
+                except OSError:
+                    self._dashboard_redirect("credential_store_unavailable")
+                    return
+
             if self.path == "/dashboard/api/provider":
                 if not self._dashboard_local_host():
                     self._send(403, {"error": "local_host_required"})
@@ -1029,7 +1178,7 @@ def serve(foreground: bool = False) -> None:
                     provider_config = load_provider_config(
                         config_path=provider_config_path
                     )
-                    provider_manager.configure(provider_config)
+                    legacy_provider_manager.configure(provider_config)
                 except ProviderConfigurationError as error:
                     self._send(
                         400,
@@ -1048,7 +1197,7 @@ def serve(foreground: bool = False) -> None:
                         },
                     )
                     return
-                current_config = provider_manager.config
+                current_config = legacy_provider_manager.config
                 self._send(
                     200,
                     {
@@ -1096,7 +1245,7 @@ def serve(foreground: bool = False) -> None:
                     self._send(400, {"error": "invalid_dashboard_body"})
                     return
                 try:
-                    provider_manager.test_connection()
+                    legacy_provider_manager.test_connection()
                 except ProviderError as error:
                     self._send(
                         502,
