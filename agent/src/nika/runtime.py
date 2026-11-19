@@ -27,8 +27,8 @@ from urllib.parse import parse_qs
 from urllib.request import Request, urlopen
 
 from nika.config import Settings
-from nika.credentials import CredentialStoreError, create_credential_store
 from nika.context import ContextBuilder, ContextBuildError
+from nika.credentials import CredentialStoreError, create_credential_store
 from nika.dashboard import render_dashboard
 from nika.database import SCHEMA_VERSION, Database
 from nika.dialogue import (
@@ -45,11 +45,16 @@ from nika.memory import (
     MemoryValidationError,
     MessageInput,
 )
-from nika.openai_provider import OpenAIProviderManager, OpenAISettings, load_openai_settings, save_openai_settings
 from nika.observation import (
     MAX_OBSERVATION_BYTES,
     ObservationValidationError,
     decode_observation,
+)
+from nika.openai_provider import (
+    OpenAIProviderManager,
+    OpenAISettings,
+    load_openai_settings,
+    save_openai_settings,
 )
 from nika.provider import (
     ProviderConfigurationError,
@@ -890,7 +895,7 @@ def serve(foreground: bool = False) -> None:
                                 else (
                                     legacy_provider_manager.config.model
                                     if legacy_provider_manager.config is not None
-                                    else openai_settings.model
+                                    else ""
                                 )
                             ),
                         },
@@ -912,11 +917,7 @@ def serve(foreground: bool = False) -> None:
                         "capabilities": [
                             "health.read",
                             "observation.submit",
-                            *(
-                                ["dialogue.chat"]
-                                if (openai_manager.is_available or legacy_provider_manager.is_available)
-                                else []
-                            ),
+                            "dialogue.chat",
                         ],
                         "counts": counts,
                     },
@@ -970,16 +971,13 @@ def serve(foreground: bool = False) -> None:
                     "capabilities": [
                         "health.read",
                         "observation.submit",
-                        *(
-                            ["dialogue.chat"]
-                            if (openai_manager.is_available or legacy_provider_manager.is_available)
-                            else []
-                        ),
+                        "dialogue.chat",
                     ],
                 },
             )
 
         def do_POST(self) -> None:
+            nonlocal openai_settings
             if self.path == "/dashboard/api/openai-credentials":
                 if not self._dashboard_mutation_allowed():
                     self._send(403, {"error": "same_origin_session_required"})
