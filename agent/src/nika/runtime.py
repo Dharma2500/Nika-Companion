@@ -1555,7 +1555,7 @@ def serve(foreground: bool = False) -> None:
                                     separators=(",", ":"),
                                 ).encode("utf-8")
                             )
-                            estimated_input_tokens = max(1, (context_bytes + 3) // 4)
+                            estimated_input_tokens = max(1, (context_bytes + 1) // 2)
                             if usage_store.would_exceed_daily_limit(
                                 daily_limit=openai_settings.daily_token_limit,
                                 estimated_input_tokens=estimated_input_tokens,
