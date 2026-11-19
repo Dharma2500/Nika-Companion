@@ -193,7 +193,9 @@ def render_dashboard(nonce: str) -> bytes:
         </div>
         <div class="actions">
           <button type="submit" name="action" value="save">Сохранить ключи и настройки</button>
-          <button type="submit" name="action" value="test">Тест OpenAI · до 64 выходных токенов</button>
+          <button type="submit" name="action" value="test">
+            Проверить сохранённые ключи (до 64 токенов)
+          </button>
           <button type="submit" name="action" value="clear_primary">Удалить ключ №1</button>
           <button type="submit" name="action" value="clear_secondary">Удалить ключ №2</button>
         </div>
