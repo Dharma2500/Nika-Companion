@@ -18,9 +18,9 @@ The project is built in small, testable layers. The local agent and persistent m
 | Area | Status |
 |---|---|
 | Python package skeleton | Initial implementation |
-| Local dashboard | Loopback-only authenticated dashboard; configures non-secret OpenAI-compatible Base URL/model in NIKA_DATA, applies changes live and runs a real generation test; API-key entry remains deferred to OS-backed credential storage |
-| Persistent SQLite memory | Schema v2; provenance-aware MemoryStore, ConversationStore and bounded ContextBuilder implemented; legacy v1 records preserved |
-| Model provider adapter | Bounded OpenAI-compatible adapter; endpoint/model load from NIKA_DATA/config/provider.json or explicit environment overrides; real machine endpoint still needs local setup and testing |
+| Local dashboard | Loopback-only authenticated dashboard; current generic Base URL/model editor is optional-provider groundwork. The target primary setup is two OpenAI API key slots stored in the Windows credential manager; secrets are never returned to the page. |
+| Persistent SQLite memory | Schema v2; provenance-aware MemoryStore, ConversationStore and bounded ContextBuilder implemented; legacy v1 records preserved. Local-first learning candidates, review and reusable skill learning are next. |
+| Model provider adapter | Current generic Chat Completions adapter is retained for optional LM Studio later. Primary OpenAI Responses API with key-1/key-2 quota-aware failover is planned; LM Studio is not being tested now. |
 | Local configuration | Environment-based, no secrets required |
 | Automated Python checks | GitHub Actions run #370: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 164 tests in each job; Ruff, compileall and source overlay passed |
 | Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; current Fabric build #146 passed and produced the v0.5.1 JAR; v1/v2/v3 local persistence verified |
@@ -64,6 +64,10 @@ export NIKA_DATA="$HOME/NIKA_DATA"
 python -m nika.cli doctor
 ~~~
 
+
+## Learning and API economy
+
+Nika's durable memory belongs to the local Python Core and SQLite database, not the OpenAI provider. The target design stores conversations, corrections, user-taught facts and verified reusable skills locally. Explicit memory operations and local retrieval must not call the API. OpenAI is called only when a user request needs generation or reasoning that local memory and deterministic logic cannot provide. Two OpenAI key slots are planned (primary and secondary failover); LM Studio remains an optional, untested alternative. API credentials must be stored in the Windows OS credential manager, never in Git, SQLite, logs or browser storage.
 
 ## Local dashboard
 
