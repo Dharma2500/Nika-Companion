@@ -111,7 +111,9 @@ def test_responses_api_sends_compact_non_stored_request_and_parses_usage() -> No
         "Bearer sk-test-primary-012345678901234567"
     )
     assert server.calls[0]["body"]["store"] is False
+    assert server.calls[0]["body"]["model"] == "gpt-6-luna"
     assert server.calls[0]["body"]["max_output_tokens"] == 320
+    assert server.calls[0]["body"]["reasoning"] == {"effort": "none"}
     assert "tools" not in server.calls[0]["body"]
 
 
