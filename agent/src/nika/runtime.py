@@ -1400,10 +1400,6 @@ def serve(foreground: bool = False) -> None:
                     )
                     return
 
-                if not provider_manager.is_available:
-                    self._send(503, {"error": "provider_unconfigured"})
-                    return
-
                 # The local runtime is a single trusted process. Serializing chat
                 # requests prevents simultaneous duplicate generation while the
                 # unique request IDs keep retries idempotent across reconnects.
@@ -1493,12 +1489,112 @@ def serve(foreground: bool = False) -> None:
                         self._send(503, {"error": "chat_persistence_failed"})
                         return
 
+                    # Explicit remember/correction operations are resolved locally.
+                    # They do not consume OpenAI tokens and remain usable offline.
                     try:
-                        reply = provider_manager.complete(context)
-                    except ProviderError:
-                        # The user turn remains stored. Retrying the same request ID
-                        # reuses it and only retries generation; no chat text is logged.
-                        self._send(503, {"error": "provider_unavailable"})
+                        learning_result = learning_engine.process(chat_request.message)
+                    except (MemoryValidationError, sqlite3.Error, ValueError):
+                        LOGGER.exception("runtime.local_learning_failed")
+                        self._send(503, {"error": "local_learning_failed"})
+                        return
+
+                    if learning_result is not None:
+                        try:
+                            assistant_message = conversation_store.append_message(
+                                chat_request.conversation_id,
+                                MessageInput(
+                                    role="assistant",
+                                    content=learning_result.reply,
+                                    source="nika-local-learning",
+                                    request_id=assistant_request_id,
+                                    metadata={
+                                        "learning_kind": learning_result.kind,
+                                        "used_api": False,
+                                        "memory_id": learning_result.memory_id,
+                                        "candidate_id": learning_result.candidate_id,
+                                    },
+                                ),
+                            )
+                        except (MemoryValidationError, sqlite3.Error):
+                            LOGGER.exception("runtime.local_learning_reply_persist_failed")
+                            self._send(503, {"error": "reply_persistence_failed"})
+                            return
+                        self._send(
+                            200,
+                            {
+                                "service": "nika",
+                                "accepted": True,
+                                "conversation_id": chat_request.conversation_id,
+                                "request_id": chat_request.request_id,
+                                "assistant_message_id": assistant_message.message_id,
+                                "reply": assistant_message.content,
+                                "cached": False,
+                                "local_learning": learning_result.kind,
+                                "used_api": False,
+                            },
+                        )
+                        return
+
+                    # The conversation is saved before checking provider availability.
+                    # No key is required for durable history or local learning.
+                    if not openai_manager.is_available and not legacy_provider_manager.is_available:
+                        self._send(503, {"error": "provider_unconfigured"})
+                        return
+
+                    try:
+                        if openai_manager.is_available:
+                            context_bytes = len(
+                                json.dumps(
+                                    context,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                ).encode("utf-8")
+                            )
+                            estimated_input_tokens = max(1, (context_bytes + 3) // 4)
+                            if usage_store.would_exceed_daily_limit(
+                                daily_limit=openai_settings.daily_token_limit,
+                                estimated_input_tokens=estimated_input_tokens,
+                                max_output_tokens=openai_settings.max_output_tokens,
+                            ):
+                                self._send(
+                                    429,
+                                    {
+                                        "error": "daily_token_budget_exceeded",
+                                        "message": (
+                                            "Достигнут локальный дневной лимит токенов. "
+                                            "Память и локальные функции продолжают работать."
+                                        ),
+                                    },
+                                )
+                                return
+                            completion = openai_manager.complete(context)
+                            reply = completion.text
+                            usage_store.record(
+                                provider="openai",
+                                key_slot=completion.key_slot,
+                                model=completion.usage.model,
+                                input_tokens=completion.usage.input_tokens,
+                                output_tokens=completion.usage.output_tokens,
+                                cached_tokens=completion.usage.cached_tokens,
+                                reasoning_tokens=completion.usage.reasoning_tokens,
+                            )
+                            assistant_source = "nika-openai"
+                        else:
+                            reply = legacy_provider_manager.complete(context)
+                            assistant_source = "nika-optional-provider"
+                    except ProviderError as error:
+                        self._send(
+                            503,
+                            {
+                                "error": "provider_unavailable",
+                                "kind": error.kind,
+                                "message": str(error),
+                            },
+                        )
+                        return
+                    except sqlite3.Error:
+                        LOGGER.exception("runtime.provider_usage_persist_failed")
+                        self._send(503, {"error": "usage_persistence_failed"})
                         return
 
                     try:
@@ -1507,7 +1603,7 @@ def serve(foreground: bool = False) -> None:
                             MessageInput(
                                 role="assistant",
                                 content=reply,
-                                source="nika-core",
+                                source=assistant_source,
                                 request_id=assistant_request_id,
                             ),
                         )
