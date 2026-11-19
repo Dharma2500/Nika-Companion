@@ -397,6 +397,7 @@ class OpenAIProviderManager:
         self._legacy_provider: LegacyProviderManager | None = None
         self._cooldown_until: dict[str, float] = {}
         self._last_slot = "none"
+        self._settings = OpenAISettings()
         self._lock = threading.RLock()
 
     @property
@@ -440,6 +441,8 @@ class OpenAIProviderManager:
                 "mode": "openai" if self._providers else (
                     "lm_studio" if self._legacy_provider is not None else "none"
                 ),
+                "model": self._settings.model,
+                "max_output_tokens": self._settings.max_output_tokens,
                 "primary_configured": "primary" in self._providers,
                 "secondary_configured": "secondary" in self._providers,
                 "active_slot": self._last_slot,
