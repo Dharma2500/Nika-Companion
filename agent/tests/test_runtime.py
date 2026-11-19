@@ -1,4 +1,5 @@
 import json
+import threading
 import os
 import secrets
 import signal
@@ -7,6 +8,7 @@ import sys
 import time
 import uuid
 from http.client import IncompleteRead
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -774,7 +776,11 @@ def test_dashboard_uses_single_use_ticket_and_redacted_local_session(
             "healthy": True,
             "schema_version": 2,
         }
-        assert dashboard_status["provider"] == {"configured": False}
+        assert dashboard_status["provider"] == {
+            "configured": False,
+            "base_url": "",
+            "model": "",
+        }
         assert dashboard_status["counts"] == {
             "events": 0,
             "memories": 0,
@@ -799,3 +805,143 @@ def test_dashboard_uses_single_use_ticket_and_redacted_local_session(
         assert replay_error.value.code == 403
     finally:
         assert stop_runtime(settings)
+
+
+
+def test_dashboard_saves_provider_and_runs_a_live_connection_test(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("NIKA_LLM_BASE_URL", "NIKA_LLM_MODEL", "NIKA_LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    response_body = json.dumps(
+        {"choices": [{"message": {"role": "assistant", "content": "Nika connection OK"}}]}
+    ).encode("utf-8")
+    captured: dict[str, object] = {}
+
+    class ProviderHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", "0"))
+            captured["path"] = self.path
+            captured["body"] = self.rfile.read(length)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response_body)))
+            self.end_headers()
+            self.wfile.write(response_body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    provider_server = ThreadingHTTPServer(("127.0.0.1", 0), ProviderHandler)
+    provider_thread = threading.Thread(
+        target=provider_server.serve_forever,
+        daemon=True,
+    )
+    provider_thread.start()
+
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    assert start_runtime(settings) == "started"
+    try:
+        status = json.loads(
+            (settings.data_dir / "runtime" / "status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        base_url = f"http://127.0.0.1:{status['port']}"
+        provider_url = (
+            f"http://127.0.0.1:{provider_server.server_address[1]}/v1"
+        )
+
+        ticket_request = Request(
+            f"{base_url}/dashboard/session/create",
+            data=b"",
+            headers={"X-Nika-Token": status["token"]},
+            method="POST",
+        )
+        with urlopen(ticket_request, timeout=2) as response:
+            ticket = json.loads(response.read().decode("utf-8"))["ticket"]
+
+        exchange = Request(
+            f"{base_url}/dashboard/session/exchange",
+            data=json.dumps({"ticket": ticket}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Origin": base_url,
+                "Sec-Fetch-Site": "same-origin",
+            },
+            method="POST",
+        )
+        with urlopen(exchange, timeout=2) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+
+        config_request = Request(
+            f"{base_url}/dashboard/api/provider",
+            data=json.dumps(
+                {"base_url": provider_url, "model": "local-test-model"}
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Origin": base_url,
+                "Sec-Fetch-Site": "same-origin",
+                "Cookie": cookie,
+            },
+            method="POST",
+        )
+        with urlopen(config_request, timeout=2) as response:
+            saved = json.loads(response.read().decode("utf-8"))
+        assert saved["saved"] is True
+        assert saved["provider"]["configured"] is True
+        assert saved["provider"]["model"] == "local-test-model"
+
+        persisted = json.loads(
+            (settings.data_dir / "config" / "provider.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert persisted == {
+            "schema_version": 1,
+            "base_url": provider_url,
+            "model": "local-test-model",
+        }
+
+        test_request = Request(
+            f"{base_url}/dashboard/api/provider/test",
+            data=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "Origin": base_url,
+                "Sec-Fetch-Site": "same-origin",
+                "Cookie": cookie,
+            },
+            method="POST",
+        )
+        with urlopen(test_request, timeout=5) as response:
+            tested = json.loads(response.read().decode("utf-8"))
+        assert tested == {"ok": True}
+        assert captured["path"] == "/v1/chat/completions"
+        model_payload = json.loads(captured["body"])
+        assert model_payload["model"] == "local-test-model"
+        assert model_payload["stream"] is False
+
+        dashboard_status = Request(
+            f"{base_url}/dashboard/api/status",
+            headers={"Cookie": cookie},
+        )
+        with urlopen(dashboard_status, timeout=2) as response:
+            current = json.loads(response.read().decode("utf-8"))
+        assert current["provider"] == {
+            "configured": True,
+            "base_url": provider_url,
+            "model": "local-test-model",
+        }
+        assert "dialogue.chat" in current["capabilities"]
+    finally:
+        assert stop_runtime(settings)
+        provider_server.shutdown()
+        provider_server.server_close()
+        provider_thread.join(timeout=2)
