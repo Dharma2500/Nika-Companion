@@ -16,6 +16,9 @@ from urllib.request import Request, urlopen
 
 from nika.credentials import validate_openai_secret
 from nika.provider import (
+    OpenAICompatibleProvider,
+    ProviderManager as LegacyProviderManager,
+    ProviderConfig,
     MAX_PROVIDER_MODEL_CHARS,
     MAX_PROVIDER_REPLY_CHARS,
     MAX_PROVIDER_REQUEST_BYTES,
@@ -391,6 +394,7 @@ class OpenAIProviderManager:
 
     def __init__(self) -> None:
         self._providers: dict[str, OpenAIResponsesProvider] = {}
+        self._legacy_provider: LegacyProviderManager | None = None
         self._cooldown_until: dict[str, float] = {}
         self._last_slot = "none"
         self._lock = threading.RLock()
@@ -398,7 +402,18 @@ class OpenAIProviderManager:
     @property
     def is_available(self) -> bool:
         with self._lock:
-            return bool(self._providers)
+            return bool(self._providers) or self._legacy_provider is not None
+
+    def configure_legacy(self, config: ProviderConfig | None) -> None:
+        """Retain the generic LM Studio path as an optional, explicitly configured mode."""
+        manager = LegacyProviderManager()
+        if config is not None:
+            manager.configure(config)
+        with self._lock:
+            self._legacy_provider = manager if config is not None else None
+            self._providers.clear()
+            self._cooldown_until.clear()
+            self._last_slot = "local" if config is not None else "none"
 
     def configure(
         self,
@@ -414,6 +429,7 @@ class OpenAIProviderManager:
             providers["secondary"] = OpenAIResponsesProvider(secondary_key, settings)
         with self._lock:
             self._providers = providers
+            self._legacy_provider = None
             self._cooldown_until.clear()
             self._last_slot = "none"
 
@@ -421,6 +437,9 @@ class OpenAIProviderManager:
         with self._lock:
             now = time.monotonic()
             return {
+                "mode": "openai" if self._providers else (
+                    "lm_studio" if self._legacy_provider is not None else "none"
+                ),
                 "primary_configured": "primary" in self._providers,
                 "secondary_configured": "secondary" in self._providers,
                 "active_slot": self._last_slot,
@@ -437,7 +456,16 @@ class OpenAIProviderManager:
     ) -> OpenAICompletion:
         with self._lock:
             providers = dict(self._providers)
+            legacy_provider = self._legacy_provider
             cooldowns = dict(self._cooldown_until)
+        if not providers and legacy_provider is not None:
+            result_text = legacy_provider.complete(context)
+            config = legacy_provider.config
+            return OpenAICompletion(
+                text=result_text,
+                usage=OpenAIUsage(0, 0, 0, 0, config.model if config else "lm-studio"),
+                key_slot="local",
+            )
         if not providers:
             raise ProviderError("Не настроен ни один ключ OpenAI.", kind="unconfigured")
 
@@ -482,7 +510,16 @@ class OpenAIProviderManager:
         """One explicit minimal request; it consumes a small number of API tokens."""
         with self._lock:
             providers = dict(self._providers)
+            legacy_provider = self._legacy_provider
             cooldowns = dict(self._cooldown_until)
+        if not providers and legacy_provider is not None:
+            legacy_provider.test_connection()
+            config = legacy_provider.config
+            return OpenAICompletion(
+                text="LM Studio connection OK",
+                usage=OpenAIUsage(0, 0, 0, 0, config.model if config else "lm-studio"),
+                key_slot="local",
+            )
         if not providers:
             raise ProviderError("Сначала сохрани хотя бы один ключ OpenAI.", kind="unconfigured")
         primary_blocked = cooldowns.get("primary", 0) > time.monotonic()
