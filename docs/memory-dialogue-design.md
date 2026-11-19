@@ -1,6 +1,6 @@
 # Nika Intelligence: memory and plain-chat dialogue design
 
-Status: text-first foundation, authenticated private chat endpoint and Fabric plain-text routing are implemented in v0.5.1. Real LM Studio configuration and in-game acceptance tests remain open.
+Status: text-first foundation, authenticated private chat, OpenAI Responses dual-key provider, local explicit-learning gate and token-usage ledger are implemented on the feature branch. Real OpenAI account and Windows Credential Manager acceptance remain open. LM Studio is optional and is not being tested.
 
 ## Product goal
 
@@ -35,7 +35,7 @@ Implementation hook: Fabric API 1.21.11 `ClientSendMessageEvents.ALLOW_CHAT` can
 
 ## Python data model
 
-The current SQLite database schema is version 2. It retains the original `event_log`, `memories`, `skills` and `world_facts` tables and adds conversation history plus memory provenance/scope. Typed MemoryStore and ConversationStore APIs are implemented.
+The current SQLite database schema is version 3. It retains the original event, memory, skill and world-fact records; adds conversations/messages and provenance/scope (v2); and adds provider_usage plus learning_candidates (v3). Typed MemoryStore, ConversationStore and UsageStore APIs are implemented.
 
 Schema migration 2 adds:
 
@@ -92,8 +92,9 @@ The Context Builder is deterministic and provider-independent. It assembles a bo
 4. A world observation only when it is fresh and its world/dimension context is known. Manual-only observation policy remains unchanged; the Context Builder must clearly label stale or missing world information rather than inventing current state.
 
 Initial conservative budget:
-- recent messages: last 12 turns, each content-bounded
-- relevant memories: at most 6
+- recent messages: last 8 turns, each content-bounded
+- relevant memories: at most 4
+- assembled context: 8 KiB UTF-8 byte ceiling
 - world context: one compact latest observation, only when freshness/scope checks pass
 - assembled context: hard character/token budget configured independently of provider
 
@@ -135,23 +136,22 @@ Implemented in the current feature branch and released as Fabric v0.5.1 (private
 - Deterministic `ContextBuilder`: stable personality instructions, recent history, relevant memories with provenance labels and a hard UTF-8 byte budget.
 - Initial keyword retrieval uses bounded candidate reads and Python Unicode casefolding, so Russian text is searched case-insensitively. Embeddings/semantic retrieval are not implemented.
 - Current ContextBuilder intentionally returns `world_context: null`. It does not pretend to know the current world. Fresh observation attachment will be added only after a scoped/freshness contract is implemented.
-- Provider adapter in `agent/src/nika/provider.py`: explicit `NIKA_LLM_BASE_URL`, `NIKA_LLM_MODEL` and optional `NIKA_LLM_API_KEY`; no hard-coded model or host.
-- OpenAI-compatible `/chat/completions` request via Python standard library, without third-party HTTP dependencies.
-- Bounded provider timeout (1–120 seconds), request payload (32 KiB), response body (64 KiB), reply text (12,000 characters), model name, token limit and temperature.
-- Sanitized provider errors; request/response body and API key are not written to diagnostics logs.
-- Fake local HTTP-server tests cover provider config validation, response parsing, payload shape, HTTP errors and oversized output.
+- Primary OpenAI adapter in `agent/src/nika/openai_provider.py`: official Responses API, default gpt-6-luna model, reasoning effort none, store=false, tools omitted, bounded request/response and output size.
+- Two API credential slots in `agent/src/nika/credentials.py`: primary and secondary, stored in Windows Credential Manager. Secrets are submitted through a same-origin native password form and never returned to the browser.
+- Generic Chat Completions adapter in `agent/src/nika/provider.py` is retained only as an optional future LM Studio path; it is not primary and is not tested in this milestone.
+- Fake Responses endpoint tests cover request shape, token usage parsing, quota failover to key 2, and no key rotation on transient rate-limit or malformed-request errors.
 - Strict `POST /bridge/v1/chat` validates schema v1, duplicate/unknown fields, canonical UUIDs, UTF-8, a 4,000-character message ceiling and 16 KiB request ceiling.
 - The chat route reuses bridge HMAC-SHA256 authentication, timestamp window and nonce replay protection.
 - User messages are persisted before provider work; assistant replies are persisted after validation. Provider calls happen outside SQLite write transactions.
 - Request IDs provide idempotency: retrying the same ID and same content returns the stored assistant reply without a second model call; reusing an ID with different content returns HTTP 409.
-- When no provider is configured, the route returns HTTP 503 before persisting the user message. Chat bodies are never written to runtime logs.
-- The bridge advertises `dialogue.chat` only when a provider was explicitly configured at runtime startup.
+- Every private user message is persisted before provider availability is checked. If no provider is configured, ordinary dialogue returns HTTP 503 but remains stored locally. Explicit remember/correction phrases are handled locally without API access. Chat bodies are never written to runtime logs.
+- The bridge advertises `dialogue.chat` so the local Python learning gate remains reachable even when both API keys are absent.
 - Fabric v0.5.1 intercepts ordinary outgoing chat whenever private Nika mode is active. Messages are canceled before server send. If `dialogue.chat` is available, the client forwards the message to the local bridge and displays the reply locally; if it is unavailable, the client blocks the message locally with a warning. Slash commands remain on their separate path.
 - Summoning Nika enables private chat. A configurable key binding (default N, visible in Controls) switches to public server chat. If the provider/bridge is unavailable before send, ordinary text is blocked locally with a warning and is never sent to the multiplayer server. Press N explicitly to switch to public server chat. If a request fails after interception, a local error says the text was not sent to the server.
 - The conversation UUID is local to the current client-world session and resets when the client level changes.
 
 Not implemented or not yet verified:
-- The actual LM Studio endpoint and exact model ID on the PC running the Nika Python runtime have not been checked or configured.
+- The actual OpenAI account/key acceptance on Vitaly's Windows machine remains open. LM Studio is retained as an optional advanced alternative and has not been configured or tested.
 - Full provider budgets, failover/rotation and automatic mode selection.
 - Manual in-game acceptance of private routing/no server leakage when dialogue.chat is available, key binding, slash passthrough, explicit public fallback with warning when unavailable and world transitions.
 - Automatic memory extraction, voice and autonomous Minecraft actions.
@@ -202,3 +202,18 @@ The project's primary learning mechanism is local persistent memory, not continu
 
 ### Memory vs API
 The API is a temporary reasoning/generation capability. It does not own Nika's identity, history or learning. A successful API response is persisted locally; future relevant dialogue can use its compact memory without retrieving the original chat transcript or calling an API just to read it.
+
+
+## Current implementation status (2026-11-19)
+
+The earlier design text describes the intended architecture; these are the behaviors present in the current feature branch:
+
+- OpenAI Responses API is primary. GPT-6 Luna (gpt-6-luna) is selected for low-cost routine dialogue, with reasoning effort none and a 320-token normal output cap.
+- Credential slots are primary and secondary OpenAI API keys stored in Windows Credential Manager. A dashboard-native POST form sends secrets directly to the local Python runtime. The browser never reads or receives secret values.
+- Secondary key failover is only for classified quota exhaustion, key authentication failure or permission/access failure. Transient 429 rate limiting does not burn the secondary key. Invalid request/model errors, network failure and server failure do not trigger key rotation.
+- The local request gate blocks a paid request before sending when the daily token ceiling would be exceeded. Default ceiling is 60,000 input+output tokens per UTC day. Provider usage details are recorded in schema v3 by key slot and model.
+- Context defaults are 8 recent messages, 4 retrieved memories and 8 KiB. The full conversation transcript is not resent.
+- Explicit "запомни ..." and correction phrases are stored locally as user_taught memories, confidence 1.0, with exact-repeat deduplication. This is a deterministic local rule, not a model call. Ordinary assistant output is not automatically turned into a memory.
+- The learning-candidate table exists for future inferred knowledge review, but automatic uncertain-candidate generation and approve/reject UI are not wired yet. Skill learning/verification is also still future work.
+- User turns are persisted locally first even when no provider is available. Bridge private chat capability remains enabled to route local learning commands; ordinary AI chat without keys produces a truthful provider-unavailable response.
+- Actual OpenAI credentials and live generation remain untested until Vitaly saves his own keys in the local dashboard. No key is to be sent through chat or committed to Git.
