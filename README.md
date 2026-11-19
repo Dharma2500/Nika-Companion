@@ -18,19 +18,19 @@ The project is built in small, testable layers. The local agent and persistent m
 | Area | Status |
 |---|---|
 | Python package skeleton | Initial implementation |
-| Local dashboard | Read-only status MVP on 127.0.0.1; python -m nika.cli dashboard starts the runtime when needed and opens a one-time authenticated browser session; provider editing and secret entry are deliberately not implemented yet |
+| Local dashboard | Loopback-only authenticated dashboard; configures non-secret OpenAI-compatible Base URL/model in NIKA_DATA, applies changes live and runs a real generation test; API-key entry remains deferred to OS-backed credential storage |
 | Persistent SQLite memory | Schema v2; provenance-aware MemoryStore, ConversationStore and bounded ContextBuilder implemented; legacy v1 records preserved |
-| Model provider adapter | Bounded OpenAI-compatible adapter and environment-based configuration implemented; actual LM Studio endpoint/model not yet verified or configured |
+| Model provider adapter | Bounded OpenAI-compatible adapter; endpoint/model load from NIKA_DATA/config/provider.json or explicit environment overrides; real machine endpoint still needs local setup and testing |
 | Local configuration | Environment-based, no secrets required |
-| Automated Python checks | GitHub Actions run #358: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 159 tests passed in each job; source overlay archive built |
+| Automated Python checks | GitHub Actions run #370: all 6 Ubuntu/Windows × Python 3.11–3.13 jobs passed; 164 tests in each job; Ruff, compileall and source overlay passed |
 | Fabric 1.21.11 client mod | Client-only mod v0.5.1; `/nika` summons the local Allay companion, automatic Python bridge connection, separate smooth head/body rotation, small idle gestures, critically damped inertial following and private unprefixed chat with N toggle and fail-closed offline handling; current Fabric build #146 passed and produced the v0.5.1 JAR; v1/v2/v3 local persistence verified |
 | Python ↔ Minecraft protocol | Authenticated handshake, one-shot `/nika observe` and private `POST /bridge/v1/chat`; HMAC/replay protection, idempotent message persistence and unprefixed private chat with fail-closed offline handling; integration tests passed in all six Python CI jobs; in-game privacy acceptance remains |
 
 
 
 Latest verified workflows:
-- [Fabric build #146](https://github.com/Dharma2500/Nika-Companion/actions/runs/44421335808) — successful; v0.5.1 artifact ID `14481902637`.
-- [Python CI #362](https://github.com/Dharma2500/Nika-Companion/actions/runs/44421335790) — all six matrix jobs and the source-overlay job successful; 159 tests passed in each job.
+- [Fabric build #154](https://github.com/Dharma2500/Nika-Companion/actions/runs/44569289697) — successful; Fabric 1.21.11 client artifact ID `14554765345`. No Java source changed in this dashboard milestone.
+- [Python CI #370](https://github.com/Dharma2500/Nika-Companion/actions/runs/44569289812) — all six Ubuntu/Windows × Python 3.11–3.13 jobs and the source-overlay job successful; 164 tests passed in each job, Ruff and compileall passed. Source overlay artifact ID `14552468722`.
 
 ## Quick start
 
@@ -73,11 +73,11 @@ After installing the project, run:
 .\\.venv\\Scripts\\python.exe -m nika.cli dashboard
 ~~~
 
-The command starts the local Python runtime if it is not already running, then opens the dashboard in your browser. The first milestone is intentionally read-only. It shows runtime uptime, SQLite health/schema/counts, whether a provider is configured and the capabilities currently advertised by the local bridge. It does not show chat contents, API keys, runtime control tokens or bridge tokens.
+The command starts the local Python runtime if it is not already running, then opens the dashboard in your browser. The initial dashboard milestone was read-only. The current dashboard also configures non-secret provider settings and tests a live generation request. It shows runtime uptime, SQLite health/schema/counts, whether a provider is configured and the capabilities currently advertised by the local bridge. It does not show chat contents, API keys, runtime control tokens or bridge tokens.
 
 The HTTP server binds only to 127.0.0.1 on an ephemeral local port. Browser entry uses a single-use ticket with a 60-second lifetime, exchanged for a one-hour HttpOnly; SameSite=Strict session cookie. The page has a nonce-based Content Security Policy and loads no external assets. The ticket is carried in the URL fragment and removed by the page after exchange. The dashboard does not store credentials in localStorage.
 
-Provider URL/model editing, connectivity tests and API-key storage are not implemented yet. Credentials are deliberately postponed; when added, secrets must use an OS-backed local credential store rather than Git or browser persistence. Close the browser tab when finished; stop the runtime separately with python -m nika.cli stop when you no longer need it.
+The dashboard can save a non-secret Base URL and Model ID to NIKA_DATA/config/provider.json and test an actual generation request. API-key entry is still deferred; when added, secrets must use an OS-backed local credential store rather than Git or browser persistence. Close the browser tab when finished; stop the runtime separately with python -m nika.cli stop when you no longer need it.
 
 ## Repository layout
 
