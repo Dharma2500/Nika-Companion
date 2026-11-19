@@ -109,7 +109,8 @@ _MIGRATION_3 = (
         status TEXT NOT NULL DEFAULT 'pending'
             CHECK (status IN ('pending', 'approved', 'rejected'))
     )""",
-    "CREATE INDEX idx_learning_candidates_status_created ON learning_candidates (status, created_at)",
+    """CREATE INDEX idx_learning_candidates_status_created
+        ON learning_candidates (status, created_at)""",
 )
 
 
