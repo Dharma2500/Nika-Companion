@@ -16,14 +16,14 @@ from urllib.request import Request, urlopen
 
 from nika.credentials import validate_openai_secret
 from nika.provider import (
-    ProviderConfig,
-    ProviderManager as LegacyProviderManager,
     MAX_PROVIDER_MODEL_CHARS,
     MAX_PROVIDER_REPLY_CHARS,
     MAX_PROVIDER_REQUEST_BYTES,
     MAX_PROVIDER_RESPONSE_BYTES,
+    ProviderConfig,
     ProviderConfigurationError,
     ProviderError,
+    ProviderManager as LegacyProviderManager,
     _validate_text,
 )
 
