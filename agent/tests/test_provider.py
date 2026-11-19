@@ -13,6 +13,7 @@ from nika.provider import (
     ProviderError,
     ProviderManager,
     load_provider_config,
+    save_provider_config,
 )
 
 
@@ -153,3 +154,76 @@ def test_provider_manager_reports_missing_provider_honestly() -> None:
     assert not manager.is_available
     with pytest.raises(ProviderError, match="No language model provider"):
         manager.complete(sample_context())
+
+
+
+def test_provider_settings_are_saved_without_secrets_and_reloaded(tmp_path) -> None:
+    path = tmp_path / "config" / "provider.json"
+    saved = save_provider_config(
+        path,
+        base_url="http://127.0.0.1:1234/v1/",
+        model="local-model",
+    )
+
+    assert saved.base_url == "http://127.0.0.1:1234/v1"
+    assert path.exists()
+    raw = path.read_text(encoding="utf-8")
+    assert "api_key" not in raw
+    assert "secret" not in raw
+
+    loaded = load_provider_config({}, config_path=path)
+    assert loaded is not None
+    assert loaded.base_url == "http://127.0.0.1:1234/v1"
+    assert loaded.model == "local-model"
+    assert loaded.api_key is None
+
+
+def test_environment_configuration_overrides_saved_provider_settings(tmp_path) -> None:
+    path = tmp_path / "provider.json"
+    save_provider_config(
+        path,
+        base_url="http://127.0.0.1:1234/v1",
+        model="saved-model",
+    )
+
+    loaded = load_provider_config(
+        {
+            "NIKA_LLM_BASE_URL": "http://127.0.0.1:9999/v1",
+            "NIKA_LLM_MODEL": "environment-model",
+            "NIKA_LLM_API_KEY": "local-secret",
+        },
+        config_path=path,
+    )
+
+    assert loaded is not None
+    assert loaded.base_url == "http://127.0.0.1:9999/v1"
+    assert loaded.model == "environment-model"
+    assert loaded.api_key == "local-secret"
+
+
+def test_provider_configuration_rejects_duplicate_json_properties(tmp_path) -> None:
+    path = tmp_path / "provider.json"
+    path.write_text(
+        '{"schema_version":1,"schema_version":1,'
+        '"base_url":"http://127.0.0.1:1234/v1","model":"local-model"}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProviderConfigurationError, match="valid JSON"):
+        load_provider_config({}, config_path=path)
+
+
+def test_provider_manager_can_be_configured_and_connection_tested() -> None:
+    response = json.dumps(
+        {"choices": [{"message": {"role": "assistant", "content": "Nika connection OK"}}]}
+    ).encode("utf-8")
+    with fake_chat_endpoint(response) as (base_url, captured):
+        manager = ProviderManager()
+        assert not manager.is_available
+        manager.configure(ProviderConfig(base_url=base_url, model="local-model"))
+        assert manager.is_available
+        manager.test_connection()
+
+    assert captured["path"] == "/v1/chat/completions"
+    payload = json.loads(captured["body"])
+    assert payload["messages"][-1]["content"] == "Reply with exactly: Nika connection OK"
