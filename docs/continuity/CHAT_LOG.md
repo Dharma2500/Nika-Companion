@@ -199,3 +199,12 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Fabric build #223 (run 44597701458) passed. No Java source changed, so no JAR update.
 - Manual acceptance remains for Windows Credential Manager and the actual OpenAI API keys; no user secrets were used in CI.
 - PR #1 remains open/draft/unmerged.
+
+
+## 2026-11-19: README and canonical handoff synchronized to CI #440
+
+- README and CHAT_CONTEXT now record Python CI #440 (run 44598269934): all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed, 185 tests each, Ruff/compileall and source overlay passed.
+- Code acceptance remains independently verified by Python CI #439 (run 44597701786) on source head 167d52fcfcf2ba58d53175a32d733e649669ab01.
+- Source overlay artifact #14567491259 was built after the first README/handoff update. Any newer documentation commit requires taking the newest successful source-overlay workflow for the final user ZIP.
+- Fabric build #224 (run 44598269833) passed. Java code unchanged, no JAR update.
+- PR #1 remains draft/open/unmerged; actual Windows Credential Manager and OpenAI account acceptance remains manual.
