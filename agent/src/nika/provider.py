@@ -7,6 +7,7 @@ import math
 import os
 import tempfile
 import threading
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from http.client import HTTPException
@@ -28,7 +29,18 @@ class ProviderConfigurationError(ValueError):
 
 
 class ProviderError(RuntimeError):
-    """Raised when a model provider cannot return a valid bounded response."""
+    """A sanitized provider failure with a machine-readable recovery class."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: str = "provider",
+        http_status: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.http_status = http_status
 
 
 @dataclass(frozen=True, slots=True)
