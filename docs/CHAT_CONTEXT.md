@@ -494,30 +494,32 @@ This section supersedes the earlier "next development" sequence in section 16. I
 
 
 
+
 ## 18. Final CI validation and package chain for the dual-key milestone (2026-11-19)
 
 ### Code validation
-- Code source head: f325bd0b1bdaff24b124b084f59e194df7366b3b.
-- Python CI #433, run 44596575853: all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; 185 tests in every job; Ruff, compileall and source-overlay generation passed.
-- No Python/runtime source code changed after that code head. Later commits were documentation/handoff/README/PR synchronization only.
-- Fabric build #217, run 44597059394: success. No Java or Fabric source changed in this milestone, so do not send or replace the JAR.
+- Final feature-branch source head: 167d52fcfcf2ba58d53175a32d733e649669ab01.
+- Python CI #439, run 44597701786: all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; 185 tests in every matrix job; Ruff and compileall passed; source-overlay generation passed.
+- Source-overlay artifact ID from #439: 14567210993. The user ZIP is built from its nested source-overlay archive with repository-relative paths at archive root. It excludes .venv and NIKA_DATA.
+- Fabric build #223, run 44597701458: success. No Java/Fabric source changed; the existing JAR remains correct and must not be replaced.
 
-### Documentation/package verification
-- Python CI #437, run 44597059597, was run after the documentation synchronization at branch commit 6f3af9b8039cee993845f44bf4a36bdefd40525f. All six Python matrix jobs and source-overlay generation passed.
-- Source-overlay artifact from #437: ID 14566416589. It is superseded by a new documentation-only handoff correction committed after #437; use the newest successful Python CI/source-overlay workflow for the deliverable ZIP, not artifact #14566416589.
-- The intended user ZIP is a repackaged inner source-overlay ZIP with repository-relative paths at archive root. It excludes .venv and NIKA_DATA; preserve both user-local folders on extraction.
+### Implemented scope
+- OpenAI Responses API is primary; key 1 primary and key 2 secondary, both stored in Windows Credential Manager. Failover is limited to quota exhaustion, authentication failure and permission/access failure. A transient HTTP 429 does not burn the reserve key.
+- GPT-6 Luna is the economical default with reasoning effort none, store=false, no tools and a 320 output-token normal request ceiling. Explicit test uses 64 output tokens.
+- SQLite schema v3 includes token usage ledger; daily token limit defaults to 60,000. Context assembly uses up to 8 recent messages, 4 relevant memories and an 8 KiB ceiling.
+- Explicit "запомни ..." and correction instructions are stored locally as user_taught memories without API calls; exact repeats are deduplicated. Normal conversation is persisted locally first but not automatically promoted to durable memory.
+- LM Studio remains optional and untested. Actual OpenAI key entry/live generation and Windows Credential Manager acceptance still need manual testing on Vitaly's PC.
+- Automatic inferred-memory review UI, verified reusable skills, monthly USD budget, per-key dollar cost and emergency API disable remain future tasks.
 
-### Current scope and acceptance
-- OpenAI Responses API primary; primary/secondary keys in Windows Credential Manager; quota/auth/permission-aware failover; token usage ledger and local daily limit; local explicit remember/correction capture.
-- LM Studio remains an optional untested alternative. Do not ask Vitaly to connect or test it.
-- Actual API key entry and live generation have not been tested against Vitaly's OpenAI account. Windows Credential Manager and private Minecraft chat still require manual acceptance on his PC.
-- Inferred memory review UI, verified reusable skills, monthly USD budget and emergency API disable remain future work.
-- Repository: Dharma2500/Nika-Companion; branch feature/companion-renderer-v0.4.0; PR #1 remains open/draft/unmerged. Do not merge without explicit approval.
+### Repository state
+- Repository: Dharma2500/Nika-Companion; branch: feature/companion-renderer-v0.4.0.
+- PR #1 remains open/draft/unmerged. Do not merge without explicit user approval.
+- No actual OpenAI user key was used in CI or stored in Git.
 
-### Install after the newest verified ZIP is delivered
+### Install
 1. Stop runtime: .\.venv\Scripts\python.exe -m nika.cli stop
-2. Extract ZIP directly over C:\Nika-Companion and overwrite tracked files. Preserve .venv and NIKA_DATA.
+2. Extract the delivered ZIP directly over C:\Nika-Companion and overwrite tracked files. Preserve .venv and NIKA_DATA.
 3. Run .\.venv\Scripts\python.exe -m nika.cli dashboard
-4. Enter primary/secondary OpenAI keys in the dashboard and save. The values are stored in Windows Credential Manager and not shown again.
-5. Use the explicit low-output OpenAI connection test only when ready to make a small API request. No automatic API polling occurs.
-6. Use existing Minecraft JAR; no JAR update is included because Java source did not change.
+4. Enter primary and secondary keys in the dashboard and save. The keys are stored in Windows Credential Manager and are never shown again.
+5. Run the explicit low-output OpenAI connection test when ready to make a small API request. No background API polling occurs.
+6. Keep the existing Minecraft JAR; Java source did not change.
