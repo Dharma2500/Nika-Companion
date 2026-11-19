@@ -27,7 +27,7 @@ import java.util.Map;
  */
 public final class NikaCompanionClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("Nika Companion");
-    private static final String MOD_VERSION = "0.3.0";
+    private static final String MOD_VERSION = "0.5.1";
     private static final int OBSERVATION_SCHEMA_VERSION = 3;
     private static final int BLOCK_SAMPLE_RADIUS_XZ = 2;
     private static final int BLOCK_SAMPLE_RADIUS_Y = 1;
@@ -37,14 +37,30 @@ public final class NikaCompanionClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
-            dispatcher.register(ClientCommandManager.literal("nika")
+        CompanionRenderer.initialize();
+        NikaChatClient.initialize();
+        BridgeClient.ensureConnected();
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(
+            client -> BridgeClient.ensureConnected()
+        );
+
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            var nikaCommand = ClientCommandManager.literal("nika")
                 .executes(context -> {
+                    CompanionRenderer.summon();
+                    NikaChatClient.setPrivateMode(true);
                     context.getSource().sendFeedback(
-                        Component.literal("Nika Companion: use /nika status, /nika connect or /nika observe")
+                        Component.literal("Ника: я рядом. Обычные сообщения можно писать прямо в чат.")
                     );
                     return 1;
                 })
+                .then(ClientCommandManager.literal("dismiss")
+                    .executes(context -> {
+                        CompanionRenderer.dismiss();
+                        NikaChatClient.setPrivateMode(false);
+                        context.getSource().sendFeedback(Component.literal("Ника: я отойду."));
+                        return 1;
+                    }))
                 .then(ClientCommandManager.literal("status")
                     .executes(context -> {
                         String status = """
@@ -53,11 +69,15 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             Client mod: active
                             Python bridge: %s
                             World observation: manual (/nika observe), last: %s
+                            Local companion: %s
+                            Chat routing: %s
                             """.formatted(
                                 MOD_VERSION,
                                 MINECRAFT_VERSION,
                                 BridgeClient.getLastStatus(),
-                                BridgeClient.getLastObservationStatus()
+                                BridgeClient.getLastObservationStatus(),
+                                CompanionRenderer.isEnabled() ? "summoned" : "hidden",
+                                NikaChatClient.getStatus()
                             );
                         context.getSource().sendFeedback(Component.literal(status));
                         return 1;
@@ -170,9 +190,10 @@ public final class NikaCompanionClient implements ClientModInitializer {
                             })
                         );
                         return 1;
-                    }))
-            )
-        );
+                    }));
+
+            dispatcher.register(nikaCommand);
+        });
 
         LOGGER.info("Nika Companion {} initialized for Minecraft {}.", MOD_VERSION, MINECRAFT_VERSION);
     }

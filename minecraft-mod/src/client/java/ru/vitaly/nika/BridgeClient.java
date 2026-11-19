@@ -6,7 +6,13 @@ import com.google.gson.JsonParser;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -17,13 +23,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.UUID;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Authenticated, loopback-only client for the local Python runtime.
@@ -35,8 +38,15 @@ final class BridgeClient {
     private static final int PROTOCOL_VERSION = 1;
     private static final String HELLO_PATH = "/bridge/v1/hello";
     private static final String OBSERVE_PATH = "/bridge/v1/observe";
+    private static final String CHAT_PATH = "/bridge/v1/chat";
     private static final long MAX_STATUS_FILE_BYTES = 16 * 1024;
     private static final int MAX_OBSERVATION_BYTES = 8 * 1024;
+    private static final int MAX_CHAT_REQUEST_BYTES = 16 * 1024;
+    private static final int MAX_CHAT_RESPONSE_BYTES = 64 * 1024;
+    private static final int MAX_CHAT_MESSAGE_CHARS = 4000;
+    private static final int MAX_CHAT_REPLY_CHARS = 12000;
+    private static final long AUTO_CONNECT_RETRY_NANOS = Duration.ofSeconds(5).toNanos();
+    private static final AtomicBoolean AUTO_CONNECT_IN_PROGRESS = new AtomicBoolean();
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(2))
@@ -49,8 +59,16 @@ final class BridgeClient {
         return thread;
     });
 
-    private static volatile String lastStatus = "not checked (run /nika connect)";
+    private static final ExecutorService CHAT_IO = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "nika-chat-bridge");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    private static volatile String lastStatus = "waiting for local runtime (automatic reconnect enabled)";
+    private static volatile long lastAutoConnectAttemptNanos;
     private static volatile String lastObservationStatus = "not sent";
+    private static volatile boolean chatAvailable;
 
     private BridgeClient() {
     }
@@ -63,8 +81,36 @@ final class BridgeClient {
         return lastObservationStatus;
     }
 
+    static boolean isChatAvailable() {
+        return chatAvailable;
+    }
+
     static CompletableFuture<String> connect() {
         return CompletableFuture.supplyAsync(BridgeClient::performHandshake, IO);
+    }
+
+    /**
+     * Keep the local bridge connected without requiring a manual command.
+     * The check is throttled and serialized; failed attempts are retried so
+     * Nika also connects when the Python runtime starts after Minecraft.
+     */
+    static void ensureConnected() {
+        long now = System.nanoTime();
+        long previousAttempt = lastAutoConnectAttemptNanos;
+        if (previousAttempt != 0L && now - previousAttempt < AUTO_CONNECT_RETRY_NANOS) {
+            return;
+        }
+        if (!AUTO_CONNECT_IN_PROGRESS.compareAndSet(false, true)) {
+            return;
+        }
+
+        lastAutoConnectAttemptNanos = now;
+        connect().whenComplete((message, error) -> {
+            if (error != null) {
+                lastStatus = "unavailable";
+            }
+            AUTO_CONNECT_IN_PROGRESS.set(false);
+        });
     }
 
     static CompletableFuture<String> submitObservation(JsonObject observation) {
@@ -76,6 +122,39 @@ final class BridgeClient {
             );
         }
         return CompletableFuture.supplyAsync(() -> performObservation(body), IO);
+    }
+
+    static CompletableFuture<String> submitChat(String conversationId, String message) {
+        if (conversationId == null || message == null || message.isBlank()
+            || message.length() > MAX_CHAT_MESSAGE_CHARS) {
+            return CompletableFuture.completedFuture(
+                "Ника: сообщение пустое или превышает 4000 символов."
+            );
+        }
+        try {
+            if (!UUID.fromString(conversationId).toString().equals(conversationId)) {
+                return CompletableFuture.completedFuture(
+                    "Ника: неверный идентификатор диалога."
+                );
+            }
+        } catch (IllegalArgumentException error) {
+            return CompletableFuture.completedFuture(
+                "Ника: неверный идентификатор диалога."
+            );
+        }
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("schema_version", 1);
+        payload.addProperty("request_id", UUID.randomUUID().toString());
+        payload.addProperty("conversation_id", conversationId);
+        payload.addProperty("message", message);
+        byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
+        if (body.length == 0 || body.length > MAX_CHAT_REQUEST_BYTES) {
+            return CompletableFuture.completedFuture(
+                "Ника: сообщение превышает лимит локального моста."
+            );
+        }
+        return CompletableFuture.supplyAsync(() -> performChat(body), CHAT_IO);
     }
 
     private static byte[] fitObservationPayload(JsonObject observation) {
@@ -155,8 +234,20 @@ final class BridgeClient {
                 return fail("Runtime identity changed during the handshake. Retry.");
             }
 
+            chatAvailable = false;
+            JsonArray capabilities = payload.getAsJsonArray("capabilities");
+            if (capabilities != null) {
+                for (int index = 0; index < capabilities.size(); index++) {
+                    if ("dialogue.chat".equals(capabilities.get(index).getAsString())) {
+                        chatAvailable = true;
+                        break;
+                    }
+                }
+            }
             lastStatus = "connected (protocol v1)";
-            return "Nika bridge: connected to Python runtime (protocol v1).";
+            return chatAvailable
+                ? "Nika bridge: connected; private text chat is available."
+                : "Nika bridge: connected; private text chat is not configured.";
         } catch (java.nio.file.NoSuchFileException error) {
             return fail("Nika runtime status not found. Start the Python runtime first.");
         } catch (InterruptedException error) {
@@ -245,6 +336,84 @@ final class BridgeClient {
         }
     }
 
+    private static String performChat(byte[] body) {
+        try {
+            BridgeConfig config = readConfig();
+            String timestamp = Long.toString(Instant.now().getEpochSecond());
+            String nonce = UUID.randomUUID().toString();
+            String signature = sign(
+                config.bridgeToken(), "POST", CHAT_PATH, timestamp, nonce, body
+            );
+
+            URI endpoint = URI.create("http://127.0.0.1:" + config.port() + CHAT_PATH);
+            HttpRequest request = HttpRequest.newBuilder(endpoint)
+                .timeout(Duration.ofSeconds(40))
+                .header("Content-Type", "application/json")
+                .header("X-Nika-Bridge-Timestamp", timestamp)
+                .header("X-Nika-Bridge-Nonce", nonce)
+                .header("X-Nika-Bridge-Signature", signature)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                .build();
+
+            HttpResponse<InputStream> response = HTTP.send(
+                request, HttpResponse.BodyHandlers.ofInputStream()
+            );
+            byte[] responseBody;
+            try (InputStream stream = response.body()) {
+                responseBody = stream.readNBytes(MAX_CHAT_RESPONSE_BYTES + 1);
+            }
+            if (responseBody.length > MAX_CHAT_RESPONSE_BYTES) {
+                return "Ника: ответ превышает допустимый размер.";
+            }
+            if (response.statusCode() == 403) {
+                chatAvailable = false;
+                lastStatus = "unavailable";
+                return "Ника: ошибка авторизации локального моста. Перезапусти Python runtime.";
+            }
+            if (response.statusCode() == 503) {
+                return "Ника сейчас не может ответить: проверь доступность локальной модели.";
+            }
+            if (response.statusCode() == 400 || response.statusCode() == 409) {
+                return "Ника: Python отклонил сообщение. Попробуй отправить его ещё раз.";
+            }
+            if (response.statusCode() != 200) {
+                return "Ника: локальный мост вернул HTTP " + response.statusCode() + ".";
+            }
+
+            JsonObject result = JsonParser.parseString(
+                new String(responseBody, StandardCharsets.UTF_8)
+            ).getAsJsonObject();
+            if (!"nika".equals(result.get("service").getAsString())
+                || !result.get("accepted").getAsBoolean()
+                || !result.has("reply")
+                || !result.has("assistant_message_id")) {
+                return "Ника: получен некорректный ответ локального моста.";
+            }
+
+            String reply = result.get("reply").getAsString();
+            if (reply.isBlank() || reply.length() > MAX_CHAT_REPLY_CHARS) {
+                return "Ника: ответ пустой или превышает лимит.";
+            }
+            lastStatus = "connected (protocol v1)";
+            return reply;
+        } catch (java.nio.file.NoSuchFileException error) {
+            chatAvailable = false;
+            lastStatus = "unavailable";
+            return "Ника: локальный Python runtime не найден.";
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return "Ника: отправка сообщения прервана.";
+        } catch (GeneralSecurityException error) {
+            return "Ника: не удалось создать подпись локального сообщения.";
+        } catch (IOException error) {
+            chatAvailable = false;
+            lastStatus = "unavailable";
+            return "Ника: локальный мост недоступен. Сообщение не отправлено на сервер.";
+        } catch (RuntimeException error) {
+            return "Ника: получен некорректный ответ локальной модели.";
+        }
+    }
+
     private static BridgeConfig readConfig() throws IOException {
         String configuredDirectory = System.getenv("NIKA_DATA");
         Path dataDirectory;
@@ -306,6 +475,7 @@ final class BridgeClient {
 
     private static String fail(String message) {
         lastStatus = "unavailable";
+        chatAvailable = false;
         return message;
     }
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import ctypes
 import hashlib
 import hmac
@@ -14,24 +15,55 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from ctypes import wintypes
 from http.client import HTTPException
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
+from urllib.parse import parse_qs
 from urllib.request import Request, urlopen
 
 from nika.config import Settings
-from nika.database import Database
+from nika.context import ContextBuilder, ContextBuildError
+from nika.credentials import CredentialStoreError, create_credential_store
+from nika.dashboard import render_dashboard
+from nika.database import SCHEMA_VERSION, Database
+from nika.dialogue import (
+    MAX_CHAT_REQUEST_BYTES,
+    ChatValidationError,
+    decode_chat_request,
+)
 from nika.event_store import EventStore, NewEvent
+from nika.learning import LearningStore, LocalLearningEngine
 from nika.logging_setup import get_logger, setup_logging
+from nika.memory import (
+    ConversationStore,
+    MemoryStore,
+    MemoryValidationError,
+    MessageInput,
+)
 from nika.observation import (
     MAX_OBSERVATION_BYTES,
     ObservationValidationError,
     decode_observation,
 )
+from nika.openai_provider import (
+    OpenAIProviderManager,
+    OpenAISettings,
+    load_openai_settings,
+    save_openai_settings,
+)
+from nika.provider import (
+    ProviderConfigurationError,
+    ProviderError,
+    ProviderManager,
+    load_provider_config,
+    save_provider_config,
+)
+from nika.usage import UsageStore
 
 LOGGER = get_logger(__name__)
 
@@ -45,10 +77,26 @@ STOP_TIMEOUT = 10.0
 BRIDGE_PROTOCOL_VERSION = 1
 BRIDGE_HELLO_PATH = "/bridge/v1/hello"
 BRIDGE_OBSERVE_PATH = "/bridge/v1/observe"
+BRIDGE_CHAT_PATH = "/bridge/v1/chat"
 BRIDGE_MAX_REQUEST_BYTES = 64 * 1024
 BRIDGE_MAX_CLOCK_SKEW_SECONDS = 60
 BRIDGE_NONCE_TTL_SECONDS = 120
 BRIDGE_MAX_TRACKED_NONCES = 4096
+
+DASHBOARD_TICKET_TTL_SECONDS = 60
+DASHBOARD_SESSION_TTL_SECONDS = 3600
+DASHBOARD_MAX_PENDING_TICKETS = 8
+
+
+def _reject_duplicate_json_properties(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON property.")
+        result[key] = value
+    return result
 
 
 def create_bridge_signature(
@@ -68,7 +116,7 @@ def create_bridge_signature(
 
 
 class BridgeAuthenticator:
-    """Authenticate read-only bridge requests and reject timestamp/nonce replays."""
+    """Authenticate bounded bridge requests and reject timestamp/nonce replays."""
 
     def __init__(self, token: str) -> None:
         self._token = token
@@ -91,7 +139,12 @@ class BridgeAuthenticator:
             and path == BRIDGE_OBSERVE_PATH
             and 0 < len(body) <= MAX_OBSERVATION_BYTES
         )
-        if not (is_handshake or is_observation):
+        is_chat = (
+            method == "POST"
+            and path == BRIDGE_CHAT_PATH
+            and 0 < len(body) <= MAX_CHAT_REQUEST_BYTES
+        )
+        if not (is_handshake or is_observation or is_chat):
             return False
         if len(body) > BRIDGE_MAX_REQUEST_BYTES:
             return False
@@ -195,6 +248,35 @@ def get_runtime_status(settings: Settings | None = None) -> dict[str, Any] | Non
     ):
         return None
     return response
+
+
+def create_dashboard_ticket(settings: Settings | None = None) -> tuple[str, str]:
+    """Create a single-use dashboard ticket through the authenticated local runtime."""
+    settings = settings or Settings.from_env()
+    status = _read_status(settings)
+    if status is None or get_runtime_status(settings) is None:
+        raise RuntimeError("Nika runtime is not running.")
+
+    endpoint = (
+        f"http://127.0.0.1:{status['port']}/dashboard/session/create"
+    )
+    request = Request(
+        endpoint,
+        data=b"",
+        headers={"X-Nika-Token": status["token"]},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=3.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, HTTPException, json.JSONDecodeError, ValueError):
+        raise RuntimeError("Could not create a local dashboard session.") from None
+
+    ticket = payload.get("ticket") if isinstance(payload, dict) else None
+    if not isinstance(ticket, str) or not ticket:
+        raise RuntimeError("The local runtime returned an invalid dashboard ticket.")
+
+    return f"http://127.0.0.1:{status['port']}/dashboard/", ticket
 
 
 def _acquire_start_lock(settings: Settings) -> int:
@@ -594,6 +676,53 @@ def serve(foreground: bool = False) -> None:
     database = Database(settings.database_path)
     database.initialize()
     event_store = EventStore(database)
+    memory_store = MemoryStore(database)
+    conversation_store = ConversationStore(database)
+    context_builder = ContextBuilder(conversation_store, memory_store)
+    learning_store = LearningStore(database)
+    learning_engine = LocalLearningEngine(memory_store, learning_store)
+    usage_store = UsageStore(database)
+
+    # OpenAI is the primary provider. Secrets are read only from the OS credential store.
+    openai_settings_path = settings.data_dir / "config" / "openai.json"
+    try:
+        openai_settings = load_openai_settings(openai_settings_path)
+    except ProviderConfigurationError:
+        openai_settings = OpenAISettings()
+        LOGGER.error("runtime.openai_settings_invalid")
+    openai_manager = OpenAIProviderManager()
+    openai_manager.configure(
+        primary_key=None,
+        secondary_key=None,
+        settings=openai_settings,
+    )
+    provider_config_path = settings.data_dir / "config" / "provider.json"
+    credential_store = None
+    try:
+        credential_store = create_credential_store()
+        primary_key = credential_store.get_secret("primary")
+        secondary_key = credential_store.get_secret("secondary")
+        openai_manager.configure(
+            primary_key=primary_key,
+            secondary_key=secondary_key,
+            settings=openai_settings,
+        )
+    except CredentialStoreError:
+        credential_store = None
+        LOGGER.warning("runtime.credential_store_unavailable")
+
+    # Retain the generic Chat Completions adapter as an optional LM Studio path.
+    legacy_provider_manager = ProviderManager()
+    try:
+        legacy_provider_manager.configure(
+            load_provider_config(config_path=provider_config_path)
+        )
+    except ProviderConfigurationError:
+        LOGGER.error("runtime.legacy_provider_configuration_invalid")
+    chat_request_lock = threading.Lock()
+    dashboard_auth_lock = threading.Lock()
+    dashboard_tickets: dict[str, float] = {}
+    dashboard_sessions: dict[str, float] = {}
     stop_event = threading.Event()
     shutdown_complete = threading.Event()
     _console_handler: tuple[Any, Any] | None = None
@@ -602,6 +731,45 @@ def serve(foreground: bool = False) -> None:
         def _authorized(self) -> bool:
             supplied = self.headers.get("X-Nika-Token", "")
             return secrets.compare_digest(supplied, token)
+
+        def _dashboard_expected_host(self) -> str:
+            if server is None:
+                return ""
+            return f"127.0.0.1:{server.server_address[1]}"
+
+        def _dashboard_local_host(self) -> bool:
+            return self.headers.get("Host", "").lower() == self._dashboard_expected_host()
+
+        def _dashboard_origin(self) -> str:
+            return f"http://{self._dashboard_expected_host()}"
+
+        def _dashboard_session_valid(self) -> bool:
+            cookie = SimpleCookie()
+            try:
+                cookie.load(self.headers.get("Cookie", ""))
+            except Exception:
+                return False
+            morsel = cookie.get("nika_dashboard_session")
+            if morsel is None:
+                return False
+
+            now = time.time()
+            with dashboard_auth_lock:
+                expired = [
+                    key for key, expires_at in dashboard_sessions.items()
+                    if expires_at <= now
+                ]
+                for key in expired:
+                    dashboard_sessions.pop(key, None)
+                return morsel.value in dashboard_sessions
+
+        def _dashboard_mutation_allowed(self) -> bool:
+            return (
+                self._dashboard_local_host()
+                and self._dashboard_session_valid()
+                and self.headers.get("Origin") == self._dashboard_origin()
+                and self.headers.get("Sec-Fetch-Site") == "same-origin"
+            )
 
         def _bridge_authorized(self) -> bool:
             return bridge_authenticator.verify(
@@ -621,8 +789,145 @@ def serve(foreground: bool = False) -> None:
             self.end_headers()
             self.wfile.write(body)
 
+        def _dashboard_redirect(self, notice: str) -> None:
+            allowed = {
+                "saved",
+                "cleared",
+                "test_ok",
+                "test_failed",
+                "no_keys",
+                "credential_store_unavailable",
+            }
+            selected = notice if notice in allowed else "saved"
+            self.send_response(303)
+            self.send_header("Location", f"/dashboard/?notice={selected}")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+
         def do_GET(self) -> None:
-            if self.path == "/status":
+            request_path = self.path.split("?", 1)[0]
+            if request_path in {"/dashboard", "/dashboard/"}:
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                nonce = base64.b64encode(secrets.token_bytes(24)).decode("ascii")
+                body = render_dashboard(nonce)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("X-Frame-Options", "DENY")
+                self.send_header(
+                    "Content-Security-Policy",
+                    "default-src 'none'; "
+                    f"script-src 'nonce-{nonce}'; "
+                    f"style-src 'nonce-{nonce}'; "
+                    "connect-src 'self'; img-src 'none'; "
+                    "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+                )
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if request_path == "/dashboard/api/status":
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                if not self._dashboard_session_valid():
+                    self._send(401, {"error": "dashboard_session_required"})
+                    return
+
+                database_healthy = False
+                counts: dict[str, int | None] = {
+                    "events": None,
+                    "memories": None,
+                    "conversations": None,
+                    "messages": None,
+                }
+                try:
+                    database_healthy = database.health_check()
+                    with closing(database.connect()) as connection:
+                        counts = {
+                            "events": int(
+                                connection.execute("SELECT COUNT(*) FROM event_log").fetchone()[0]
+                            ),
+                            "memories": int(
+                                connection.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+                            ),
+                            "conversations": int(
+                                connection.execute(
+                                    "SELECT COUNT(*) FROM conversations"
+                                ).fetchone()[0]
+                            ),
+                            "messages": int(
+                                connection.execute(
+                                    "SELECT COUNT(*) FROM conversation_messages"
+                                ).fetchone()[0]
+                            ),
+                        }
+                except sqlite3.Error:
+                    LOGGER.warning("runtime.dashboard_database_check_failed")
+
+                started_at = status_data.get("started_at", time.time())
+                self._send(
+                    200,
+                    {
+                        "runtime": "running",
+                        "uptime_seconds": max(0.0, time.time() - float(started_at)),
+                        "database": {
+                            "healthy": database_healthy,
+                            "schema_version": SCHEMA_VERSION,
+                        },
+                        "provider": {
+                            "configured": (
+                                openai_manager.is_available
+                                or legacy_provider_manager.is_available
+                            ),
+                            "base_url": (
+                                legacy_provider_manager.config.base_url
+                                if legacy_provider_manager.config is not None
+                                and not openai_manager.is_available
+                                else ""
+                            ),
+                            "model": (
+                                openai_settings.model
+                                if openai_manager.is_available
+                                else (
+                                    legacy_provider_manager.config.model
+                                    if legacy_provider_manager.config is not None
+                                    else ""
+                                )
+                            ),
+                        },
+                        "openai": {
+                            **openai_manager.status(),
+                            "daily_token_limit": openai_settings.daily_token_limit,
+                            "usage": {
+                                "input_tokens": usage_store.daily_totals().input_tokens,
+                                "output_tokens": usage_store.daily_totals().output_tokens,
+                                "cached_tokens": usage_store.daily_totals().cached_tokens,
+                                "reasoning_tokens": usage_store.daily_totals().reasoning_tokens,
+                                "total_tokens": usage_store.daily_totals().total_tokens,
+                                "requests": usage_store.daily_totals().requests,
+                            },
+                        },
+                        "learning": {
+                            "pending_candidates": learning_store.pending_count(),
+                        },
+                        "capabilities": [
+                            "health.read",
+                            "observation.submit",
+                            "dialogue.chat",
+                        ],
+                        "counts": counts,
+                    },
+                )
+                return
+
+            if request_path == "/status":
                 if not self._authorized():
                     self._send(403, {"error": "unauthorized"})
                 else:
@@ -636,7 +941,7 @@ def serve(foreground: bool = False) -> None:
                     )
                 return
 
-            if self.path != BRIDGE_HELLO_PATH:
+            if request_path != BRIDGE_HELLO_PATH:
                 self._send(404, {"error": "not_found"})
                 return
 
@@ -666,11 +971,669 @@ def serve(foreground: bool = False) -> None:
                     "state": "running",
                     "pid": os.getpid(),
                     "version": "0.1.0",
-                    "capabilities": ["health.read", "observation.submit"],
+                    "capabilities": [
+                        "health.read",
+                        "observation.submit",
+                        "dialogue.chat",
+                    ],
                 },
             )
 
         def do_POST(self) -> None:
+            nonlocal openai_settings
+            if self.path == "/dashboard/api/openai-credentials":
+                if not self._dashboard_mutation_allowed():
+                    self._send(403, {"error": "same_origin_session_required"})
+                    return
+                if credential_store is None:
+                    self._dashboard_redirect("credential_store_unavailable")
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != (
+                    "application/x-www-form-urlencoded"
+                ):
+                    self._send(415, {"error": "form_urlencoded_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 5 or int(raw_length) > 12_000:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                if self.headers.get("Transfer-Encoding") is not None:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                body = self.rfile.read(int(raw_length))
+                if len(body) != int(raw_length):
+                    self._send(400, {"error": "incomplete_request_body"})
+                    return
+                try:
+                    form = parse_qs(
+                        body.decode("utf-8"),
+                        keep_blank_values=True,
+                        strict_parsing=False,
+                        max_num_fields=8,
+                    )
+                except (UnicodeDecodeError, ValueError):
+                    self._send(400, {"error": "invalid_openai_settings_form"})
+                    return
+                allowed_fields = {
+                    "action",
+                    "primary_key",
+                    "secondary_key",
+                    "model",
+                    "daily_token_limit",
+                }
+                if set(form) - allowed_fields or any(len(values) != 1 for values in form.values()):
+                    self._send(400, {"error": "invalid_openai_settings_form"})
+                    return
+
+                action = form.get("action", [""])[0]
+                if action not in {"save", "clear_primary", "clear_secondary", "test"}:
+                    self._send(400, {"error": "invalid_openai_settings_action"})
+                    return
+
+                try:
+                    if action == "save":
+                        primary_value = form.get("primary_key", [""])[0]
+                        secondary_value = form.get("secondary_key", [""])[0]
+                        model_value = form.get("model", [openai_settings.model])[0]
+                        limit_value = form.get(
+                            "daily_token_limit",
+                            [str(openai_settings.daily_token_limit)],
+                        )[0]
+                        daily_limit = int(limit_value)
+                        updated_settings = OpenAISettings(
+                            model=model_value,
+                            max_output_tokens=openai_settings.max_output_tokens,
+                            daily_token_limit=daily_limit,
+                        )
+                        # Validate all non-secret settings before touching saved credentials.
+                        save_openai_settings(openai_settings_path, updated_settings)
+                        if primary_value:
+                            credential_store.set_secret("primary", primary_value)
+                        if secondary_value:
+                            credential_store.set_secret("secondary", secondary_value)
+                        openai_settings = updated_settings
+                        primary_key = credential_store.get_secret("primary")
+                        secondary_key = credential_store.get_secret("secondary")
+                        if not primary_key and not secondary_key:
+                            self._dashboard_redirect("no_keys")
+                            return
+                        openai_manager.configure(
+                            primary_key=primary_key,
+                            secondary_key=secondary_key,
+                            settings=openai_settings,
+                        )
+                        self._dashboard_redirect("saved")
+                        return
+
+                    if action == "clear_primary":
+                        credential_store.delete_secret("primary")
+                        primary_key = credential_store.get_secret("primary")
+                        secondary_key = credential_store.get_secret("secondary")
+                        openai_manager.configure(
+                            primary_key=primary_key,
+                            secondary_key=secondary_key,
+                            settings=openai_settings,
+                        )
+                        self._dashboard_redirect("cleared")
+                        return
+
+                    if action == "clear_secondary":
+                        credential_store.delete_secret("secondary")
+                        primary_key = credential_store.get_secret("primary")
+                        secondary_key = credential_store.get_secret("secondary")
+                        openai_manager.configure(
+                            primary_key=primary_key,
+                            secondary_key=secondary_key,
+                            settings=openai_settings,
+                        )
+                        self._dashboard_redirect("cleared")
+                        return
+
+                    result = openai_manager.test_connection()
+                    usage_store.record(
+                        provider="openai",
+                        key_slot=result.key_slot,
+                        model=result.usage.model,
+                        input_tokens=result.usage.input_tokens,
+                        output_tokens=result.usage.output_tokens,
+                        cached_tokens=result.usage.cached_tokens,
+                        reasoning_tokens=result.usage.reasoning_tokens,
+                    )
+                    self._dashboard_redirect("test_ok")
+                    return
+                except (CredentialStoreError, ProviderConfigurationError, ValueError):
+                    self._dashboard_redirect("credential_store_unavailable")
+                    return
+                except ProviderError:
+                    self._dashboard_redirect("test_failed")
+                    return
+                except OSError:
+                    self._dashboard_redirect("credential_store_unavailable")
+                    return
+
+            if self.path == "/dashboard/api/provider":
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                if not self._dashboard_session_valid():
+                    self._send(401, {"error": "dashboard_session_required"})
+                    return
+                if (
+                    self.headers.get("Origin") != self._dashboard_origin()
+                    or self.headers.get("Sec-Fetch-Site") != "same-origin"
+                ):
+                    self._send(403, {"error": "same_origin_required"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 4 or int(raw_length) > 4096:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                if self.headers.get("Transfer-Encoding") is not None:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                body = self.rfile.read(int(raw_length))
+                if len(body) != int(raw_length):
+                    self._send(400, {"error": "incomplete_request_body"})
+                    return
+                try:
+                    payload = json.loads(
+                        body.decode("utf-8"),
+                        object_pairs_hook=_reject_duplicate_json_properties,
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                    self._send(400, {"error": "invalid_provider_configuration"})
+                    return
+                if (
+                    not isinstance(payload, dict)
+                    or set(payload) != {"base_url", "model"}
+                    or not isinstance(payload["base_url"], str)
+                    or not isinstance(payload["model"], str)
+                ):
+                    self._send(400, {"error": "invalid_provider_configuration"})
+                    return
+                if (
+                    os.environ.get("NIKA_LLM_BASE_URL", "").strip()
+                    or os.environ.get("NIKA_LLM_MODEL", "").strip()
+                ):
+                    self._send(
+                        409,
+                        {
+                            "error": "provider_environment_override",
+                            "message": (
+                                "Настройки модели заданы переменными среды. "
+                                "Удали их, чтобы управлять подключением из панели."
+                            ),
+                        },
+                    )
+                    return
+                try:
+                    save_provider_config(
+                        provider_config_path,
+                        base_url=payload["base_url"],
+                        model=payload["model"],
+                    )
+                    provider_config = load_provider_config(
+                        config_path=provider_config_path
+                    )
+                    legacy_provider_manager.configure(provider_config)
+                except ProviderConfigurationError as error:
+                    self._send(
+                        400,
+                        {
+                            "error": "invalid_provider_configuration",
+                            "message": str(error),
+                        },
+                    )
+                    return
+                except OSError:
+                    self._send(
+                        500,
+                        {
+                            "error": "provider_configuration_write_failed",
+                            "message": "Не удалось сохранить настройки в NIKA_DATA.",
+                        },
+                    )
+                    return
+                current_config = legacy_provider_manager.config
+                self._send(
+                    200,
+                    {
+                        "saved": True,
+                        "provider": {
+                            "configured": current_config is not None,
+                            "base_url": current_config.base_url if current_config else "",
+                            "model": current_config.model if current_config else "",
+                        },
+                    },
+                )
+                return
+
+            if self.path == "/dashboard/api/provider/test":
+                if not self._dashboard_local_host():
+                    self._send(403, {"error": "local_host_required"})
+                    return
+                if not self._dashboard_session_valid():
+                    self._send(401, {"error": "dashboard_session_required"})
+                    return
+                if (
+                    self.headers.get("Origin") != self._dashboard_origin()
+                    or self.headers.get("Sec-Fetch-Site") != "same-origin"
+                ):
+                    self._send(403, {"error": "same_origin_required"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 2 or int(raw_length) > 16:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                body = self.rfile.read(int(raw_length))
+                try:
+                    payload = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                if payload != {}:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                try:
+                    legacy_provider_manager.test_connection()
+                except ProviderError as error:
+                    self._send(
+                        502,
+                        {
+                            "error": "provider_test_failed",
+                            "message": str(error),
+                        },
+                    )
+                    return
+                self._send(200, {"ok": True})
+                return
+
+            if self.path == "/dashboard/session/create":
+                if not self._dashboard_local_host() or not self._authorized():
+                    self._send(403, {"error": "unauthorized"})
+                    return
+
+                now = time.time()
+                ticket = secrets.token_urlsafe(32)
+                with dashboard_auth_lock:
+                    expired = [
+                        key for key, expires_at in dashboard_tickets.items()
+                        if expires_at <= now
+                    ]
+                    for key in expired:
+                        dashboard_tickets.pop(key, None)
+                    while len(dashboard_tickets) >= DASHBOARD_MAX_PENDING_TICKETS:
+                        oldest = min(dashboard_tickets, key=dashboard_tickets.get)
+                        dashboard_tickets.pop(oldest, None)
+                    dashboard_tickets[ticket] = now + DASHBOARD_TICKET_TTL_SECONDS
+
+                self._send(
+                    201,
+                    {"ticket": ticket, "expires_in": DASHBOARD_TICKET_TTL_SECONDS},
+                )
+                return
+
+            if self.path == "/dashboard/session/exchange":
+                if (
+                    not self._dashboard_local_host()
+                    or self.headers.get("Origin") != self._dashboard_origin()
+                    or self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin"
+                ):
+                    self._send(403, {"error": "same_origin_required"})
+                    return
+
+                raw_length = self.headers.get("Content-Length", "")
+                if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 4 or int(raw_length) > 4096:
+                    self._send(413, {"error": "dashboard_request_too_large"})
+                    return
+                if self.headers.get("Transfer-Encoding") is not None:
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+
+                body = self.rfile.read(int(raw_length))
+                try:
+                    payload = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._send(400, {"error": "invalid_dashboard_body"})
+                    return
+                if (
+                    not isinstance(payload, dict)
+                    or set(payload) != {"ticket"}
+                    or not isinstance(payload["ticket"], str)
+                    or not 32 <= len(payload["ticket"]) <= 128
+                ):
+                    self._send(400, {"error": "invalid_dashboard_ticket"})
+                    return
+
+                now = time.time()
+                with dashboard_auth_lock:
+                    expiry = dashboard_tickets.pop(payload["ticket"], None)
+                    if expiry is None or expiry <= now:
+                        self._send(403, {"error": "dashboard_ticket_invalid_or_expired"})
+                        return
+                    session = secrets.token_urlsafe(32)
+                    dashboard_sessions[session] = now + DASHBOARD_SESSION_TTL_SECONDS
+
+                response_body = json.dumps({"authenticated": True}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header(
+                    "Set-Cookie",
+                    "nika_dashboard_session="
+                    + session
+                    + "; HttpOnly; SameSite=Strict; Path=/dashboard; Max-Age="
+                    + str(DASHBOARD_SESSION_TTL_SECONDS),
+                )
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(response_body)
+                return
+
+            if self.path == BRIDGE_CHAT_PATH:
+                raw_length = self.headers.get("Content-Length", "")
+                if (
+                    not raw_length
+                    or not raw_length.isascii()
+                    or not raw_length.isdecimal()
+                ):
+                    self._send(400, {"error": "invalid_content_length"})
+                    return
+                if len(raw_length) > 10:
+                    self._send(413, {"error": "request_too_large"})
+                    return
+                content_length = int(raw_length)
+                if content_length > MAX_CHAT_REQUEST_BYTES:
+                    self._send(413, {"error": "chat_request_too_large"})
+                    return
+                if (
+                    content_length == 0
+                    or self.headers.get("Transfer-Encoding") is not None
+                ):
+                    self._send(400, {"error": "invalid_chat_body"})
+                    return
+                content_type = self.headers.get("Content-Type", "")
+                if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                    self._send(415, {"error": "application_json_required"})
+                    return
+
+                body = self.rfile.read(content_length)
+                if len(body) != content_length:
+                    self._send(400, {"error": "incomplete_request_body"})
+                    return
+                if not bridge_authenticator.verify(
+                    method=self.command,
+                    path=self.path,
+                    timestamp=self.headers.get("X-Nika-Bridge-Timestamp", ""),
+                    nonce=self.headers.get("X-Nika-Bridge-Nonce", ""),
+                    signature=self.headers.get("X-Nika-Bridge-Signature", ""),
+                    body=body,
+                ):
+                    self._send(403, {"error": "unauthorized"})
+                    return
+
+                try:
+                    chat_request = decode_chat_request(body)
+                except ChatValidationError as error:
+                    self._send(
+                        400,
+                        {"error": "invalid_chat_request", "message": str(error)},
+                    )
+                    return
+
+                # The local runtime is a single trusted process. Serializing chat
+                # requests prevents simultaneous duplicate generation while the
+                # unique request IDs keep retries idempotent across reconnects.
+                with chat_request_lock:
+                    try:
+                        conversation = conversation_store.get_conversation(
+                            chat_request.conversation_id
+                        )
+                        if conversation is None:
+                            try:
+                                conversation = conversation_store.create_conversation(
+                                    conversation_id=chat_request.conversation_id
+                                )
+                            except sqlite3.IntegrityError:
+                                conversation = conversation_store.get_conversation(
+                                    chat_request.conversation_id
+                                )
+                                if conversation is None:
+                                    raise
+
+                        existing_user = conversation_store.get_message_by_request_id(
+                            chat_request.request_id
+                        )
+                        if existing_user is not None and (
+                            existing_user.conversation_id != chat_request.conversation_id
+                            or existing_user.role != "user"
+                            or existing_user.content != chat_request.message
+                            or existing_user.source != "minecraft-client"
+                        ):
+                            self._send(409, {"error": "request_id_conflict"})
+                            return
+
+                        assistant_request_id = f"{chat_request.request_id}:assistant"
+                        cached_reply = conversation_store.get_message_by_request_id(
+                            assistant_request_id
+                        )
+                        if cached_reply is not None:
+                            if (
+                                cached_reply.conversation_id
+                                != chat_request.conversation_id
+                                or cached_reply.role != "assistant"
+                            ):
+                                self._send(409, {"error": "request_id_conflict"})
+                                return
+                            self._send(
+                                200,
+                                {
+                                    "service": "nika",
+                                    "accepted": True,
+                                    "conversation_id": chat_request.conversation_id,
+                                    "request_id": chat_request.request_id,
+                                    "assistant_message_id": cached_reply.message_id,
+                                    "reply": cached_reply.content,
+                                    "cached": True,
+                                },
+                            )
+                            return
+
+                        conversation_store.append_message(
+                            chat_request.conversation_id,
+                            MessageInput(
+                                role="user",
+                                content=chat_request.message,
+                                source="minecraft-client",
+                                request_id=chat_request.request_id,
+                            ),
+                        )
+                        conversation = conversation_store.get_conversation(
+                            chat_request.conversation_id
+                        )
+                        if conversation is None:
+                            raise MemoryValidationError("Conversation disappeared.")
+
+                        context = context_builder.build(
+                            chat_request.conversation_id,
+                            chat_request.message,
+                            world_id=conversation.world_id,
+                        )
+                    except (MemoryValidationError, ContextBuildError) as error:
+                        self._send(
+                            400,
+                            {"error": "invalid_conversation", "message": str(error)},
+                        )
+                        return
+                    except sqlite3.Error:
+                        LOGGER.exception("runtime.chat_persistence_failed")
+                        self._send(503, {"error": "chat_persistence_failed"})
+                        return
+
+                    # Explicit remember/correction operations are resolved locally.
+                    # They do not consume OpenAI tokens and remain usable offline.
+                    try:
+                        learning_result = learning_engine.process(chat_request.message)
+                    except (MemoryValidationError, sqlite3.Error, ValueError):
+                        LOGGER.exception("runtime.local_learning_failed")
+                        self._send(503, {"error": "local_learning_failed"})
+                        return
+
+                    if learning_result is not None:
+                        try:
+                            assistant_message = conversation_store.append_message(
+                                chat_request.conversation_id,
+                                MessageInput(
+                                    role="assistant",
+                                    content=learning_result.reply,
+                                    source="nika-local-learning",
+                                    request_id=assistant_request_id,
+                                    metadata={
+                                        "learning_kind": learning_result.kind,
+                                        "used_api": False,
+                                        "memory_id": learning_result.memory_id,
+                                        "candidate_id": learning_result.candidate_id,
+                                    },
+                                ),
+                            )
+                        except (MemoryValidationError, sqlite3.Error):
+                            LOGGER.exception("runtime.local_learning_reply_persist_failed")
+                            self._send(503, {"error": "reply_persistence_failed"})
+                            return
+                        self._send(
+                            200,
+                            {
+                                "service": "nika",
+                                "accepted": True,
+                                "conversation_id": chat_request.conversation_id,
+                                "request_id": chat_request.request_id,
+                                "assistant_message_id": assistant_message.message_id,
+                                "reply": assistant_message.content,
+                                "cached": False,
+                                "local_learning": learning_result.kind,
+                                "used_api": False,
+                            },
+                        )
+                        return
+
+                    # The conversation is saved before checking provider availability.
+                    # No key is required for durable history or local learning.
+                    if not openai_manager.is_available and not legacy_provider_manager.is_available:
+                        self._send(503, {"error": "provider_unconfigured"})
+                        return
+
+                    try:
+                        if openai_manager.is_available:
+                            context_bytes = len(
+                                json.dumps(
+                                    context,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                ).encode("utf-8")
+                            )
+                            estimated_input_tokens = max(1, (context_bytes + 1) // 2)
+                            if usage_store.would_exceed_daily_limit(
+                                daily_limit=openai_settings.daily_token_limit,
+                                estimated_input_tokens=estimated_input_tokens,
+                                max_output_tokens=openai_settings.max_output_tokens,
+                            ):
+                                self._send(
+                                    429,
+                                    {
+                                        "error": "daily_token_budget_exceeded",
+                                        "message": (
+                                            "Достигнут локальный дневной лимит токенов. "
+                                            "Память и локальные функции продолжают работать."
+                                        ),
+                                    },
+                                )
+                                return
+                            completion = openai_manager.complete(context)
+                            reply = completion.text
+                            usage_store.record(
+                                provider="openai",
+                                key_slot=completion.key_slot,
+                                model=completion.usage.model,
+                                input_tokens=completion.usage.input_tokens,
+                                output_tokens=completion.usage.output_tokens,
+                                cached_tokens=completion.usage.cached_tokens,
+                                reasoning_tokens=completion.usage.reasoning_tokens,
+                            )
+                            assistant_source = "nika-openai"
+                        else:
+                            reply = legacy_provider_manager.complete(context)
+                            assistant_source = "nika-optional-provider"
+                    except ProviderError as error:
+                        self._send(
+                            503,
+                            {
+                                "error": "provider_unavailable",
+                                "kind": error.kind,
+                                "message": str(error),
+                            },
+                        )
+                        return
+                    except sqlite3.Error:
+                        LOGGER.exception("runtime.provider_usage_persist_failed")
+                        self._send(503, {"error": "usage_persistence_failed"})
+                        return
+
+                    try:
+                        assistant_message = conversation_store.append_message(
+                            chat_request.conversation_id,
+                            MessageInput(
+                                role="assistant",
+                                content=reply,
+                                source=assistant_source,
+                                request_id=assistant_request_id,
+                            ),
+                        )
+                    except (MemoryValidationError, sqlite3.Error):
+                        LOGGER.exception("runtime.chat_reply_persist_failed")
+                        self._send(503, {"error": "reply_persistence_failed"})
+                        return
+
+                    self._send(
+                        200,
+                        {
+                            "service": "nika",
+                            "accepted": True,
+                            "conversation_id": chat_request.conversation_id,
+                            "request_id": chat_request.request_id,
+                            "assistant_message_id": assistant_message.message_id,
+                            "reply": assistant_message.content,
+                            "cached": False,
+                        },
+                    )
+                return
+
             if self.path == BRIDGE_OBSERVE_PATH:
                 raw_length = self.headers.get("Content-Length", "")
                 if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():

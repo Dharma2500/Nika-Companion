@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 _MIGRATION_1 = (
     """CREATE TABLE event_log (
@@ -51,6 +51,68 @@ _MIGRATION_1 = (
     "CREATE INDEX idx_world_facts_world ON world_facts (world_id, observed_at)",
 )
 
+_MIGRATION_2 = (
+    """ALTER TABLE memories ADD COLUMN provenance_type TEXT NOT NULL
+        DEFAULT 'hypothesis'
+        CHECK (provenance_type IN (
+            'user_taught', 'observed', 'verified', 'inferred', 'hypothesis'
+        ))""",
+    """ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'
+        CHECK (scope IN ('global', 'world'))""",
+    "ALTER TABLE memories ADD COLUMN world_id TEXT",
+    "ALTER TABLE memories ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'",
+    "CREATE INDEX idx_memories_scope_world ON memories (scope, world_id)",
+    """CREATE TABLE conversations (
+        conversation_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        title TEXT,
+        world_id TEXT
+    )""",
+    "CREATE INDEX idx_conversations_updated_at ON conversations (updated_at)",
+    """CREATE TABLE conversation_messages (
+        message_id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations (conversation_id)
+            ON DELETE CASCADE,
+        request_id TEXT UNIQUE,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+        content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 12000),
+        created_at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}'
+    )""",
+    """CREATE INDEX idx_conversation_messages_timeline
+        ON conversation_messages (conversation_id, created_at, message_id)""",
+)
+
+
+_MIGRATION_3 = (
+    """CREATE TABLE provider_usage (
+        usage_id TEXT PRIMARY KEY,
+        occurred_at TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        key_slot TEXT NOT NULL,
+        model TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+        output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+        cached_tokens INTEGER NOT NULL CHECK (cached_tokens >= 0),
+        reasoning_tokens INTEGER NOT NULL CHECK (reasoning_tokens >= 0),
+        total_tokens INTEGER NOT NULL CHECK (total_tokens >= 0)
+    )""",
+    "CREATE INDEX idx_provider_usage_occurred_at ON provider_usage (occurred_at)",
+    """CREATE TABLE learning_candidates (
+        candidate_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 6000),
+        source TEXT NOT NULL,
+        trigger_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending', 'approved', 'rejected'))
+    )""",
+    """CREATE INDEX idx_learning_candidates_status_created
+        ON learning_candidates (status, created_at)""",
+)
+
 
 class Database:
     """Owns the local SQLite database and its schema migrations."""
@@ -92,10 +154,22 @@ class Database:
                     f"Database schema {current_version} is newer than supported "
                     f"schema {SCHEMA_VERSION}; refusing to modify it."
                 )
+
             if current_version < 1:
                 for statement in _MIGRATION_1:
                     connection.execute(statement)
                 connection.execute("PRAGMA user_version = 1")
+                current_version = 1
+
+            if current_version < 2:
+                for statement in _MIGRATION_2:
+                    connection.execute(statement)
+                connection.execute("PRAGMA user_version = 2")
+
+            if current_version < 3:
+                for statement in _MIGRATION_3:
+                    connection.execute(statement)
+                connection.execute("PRAGMA user_version = 3")
 
     def health_check(self) -> bool:
         """Return whether SQLite can execute a basic integrity query."""

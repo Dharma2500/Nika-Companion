@@ -89,9 +89,9 @@ class BackupManager:
             raise sqlite3.DatabaseError("The selected backup failed its integrity check.")
 
         schema_version = self._schema_version(source)
-        if schema_version != SCHEMA_VERSION:
+        if not 1 <= schema_version <= SCHEMA_VERSION:
             raise RuntimeError(
-                f"Restore requires schema {SCHEMA_VERSION}; "
+                f"Restore requires schema 1 through {SCHEMA_VERSION}; "
                 f"the selected backup uses schema {schema_version}."
             )
         return source
@@ -126,6 +126,37 @@ class BackupManager:
             if not self.verify_backup(temporary_path):
                 raise sqlite3.DatabaseError(
                     "The staged restore file failed its integrity check."
+                )
+
+            # Migrate older supported backups on a staged copy only. Never alter
+            # the selected backup file, and never install a partially migrated DB.
+            Database(temporary_path).initialize()
+            staged_connection = sqlite3.connect(temporary_path)
+            try:
+                staged_version = int(
+                    staged_connection.execute("PRAGMA user_version").fetchone()[0]
+                )
+                if staged_version != SCHEMA_VERSION:
+                    raise sqlite3.DatabaseError(
+                        f"Staged restore schema {staged_version} does not match "
+                        f"supported schema {SCHEMA_VERSION}."
+                    )
+                staged_connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                staged_connection.execute("PRAGMA journal_mode = DELETE")
+                integrity = staged_connection.execute("PRAGMA integrity_check").fetchone()
+                if integrity is None or integrity[0] != "ok":
+                    raise sqlite3.DatabaseError(
+                        "The migrated restore file failed its integrity check."
+                    )
+            finally:
+                staged_connection.close()
+
+            for staged_sidecar in self._sidecar_paths(temporary_path):
+                staged_sidecar.unlink(missing_ok=True)
+
+            if self._schema_version(temporary_path) != SCHEMA_VERSION:
+                raise sqlite3.DatabaseError(
+                    "The staged restore file is not at the current schema version."
                 )
 
             if had_original_files:

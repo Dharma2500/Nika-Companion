@@ -19,7 +19,13 @@ def test_initialize_creates_versioned_schema(tmp_path: Path) -> None:
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
+        memory_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(memories)")
+        }
     assert {"event_log", "memories", "skills", "world_facts"} <= tables
+    assert {"provenance_type", "scope", "world_id", "tags_json"} <= memory_columns
+    assert {"conversations", "conversation_messages"} <= tables
+    assert {"provider_usage", "learning_candidates"} <= tables
 
 
 def test_initialize_is_idempotent(tmp_path: Path) -> None:
@@ -59,3 +65,68 @@ def test_failed_migration_rolls_back_partial_schema(tmp_path: Path) -> None:
     assert "event_log" not in tables
     assert "memories" in tables
     assert version == 0
+
+
+def test_migration_v2_preserves_existing_memories(tmp_path: Path) -> None:
+    database = Database(tmp_path / "legacy.sqlite3")
+    with database.transaction() as connection:
+        connection.execute(
+            """CREATE TABLE event_log (
+                event_id TEXT PRIMARY KEY,
+                occurred_at TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                source TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """CREATE TABLE memories (
+                memory_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                category TEXT NOT NULL,
+                content TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NOT NULL
+            )"""
+        )
+        connection.execute(
+            """CREATE TABLE skills (
+                skill_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                definition_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NOT NULL
+            )"""
+        )
+        connection.execute(
+            """CREATE TABLE world_facts (
+                fact_id TEXT PRIMARY KEY,
+                world_id TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                fact_type TEXT NOT NULL,
+                value_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NOT NULL
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO memories VALUES (
+                'legacy-1', '2026-01-01T00:00:00+00:00',
+                '2026-01-01T00:00:00+00:00', 'preference',
+                'Vitaly likes clear answers', 'conversation', 0.8
+            )"""
+        )
+        connection.execute("PRAGMA user_version = 1")
+
+    database.initialize()
+    record = database.connect().execute(
+        "SELECT * FROM memories WHERE memory_id = 'legacy-1'"
+    ).fetchone()
+    assert record is not None
+    assert record["content"] == "Vitaly likes clear answers"
+    assert record["provenance_type"] == "hypothesis"
+    assert record["scope"] == "global"

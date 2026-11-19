@@ -143,3 +143,44 @@ def test_migrate_data_command_stops_runtime_and_preserves_source(
     assert (destination / "backups").is_dir()
     assert (destination / "learning").is_dir()
     assert (destination / "migration-manifest.json").is_file()
+
+
+
+def test_dashboard_command_starts_runtime_and_opens_loopback_url(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "nika-data",
+        database_path=tmp_path / "nika-data" / "nika.sqlite3",
+    )
+    started: list[Settings] = []
+    opened: list[tuple[str, int]] = []
+
+    monkeypatch.setattr(
+        cli.Settings,
+        "from_env",
+        classmethod(lambda cls: settings),
+    )
+    monkeypatch.setattr(cli, "get_runtime_status", lambda selected: None)
+    monkeypatch.setattr(cli, "start_runtime", lambda selected: started.append(selected))
+    monkeypatch.setattr(
+        cli,
+        "create_dashboard_ticket",
+        lambda selected: ("http://127.0.0.1:45678/dashboard/", "one-time-ticket"),
+    )
+    monkeypatch.setattr(
+        cli.webbrowser,
+        "open",
+        lambda url, new=0: opened.append((url, new)) or True,
+    )
+
+    assert cli.run_dashboard() == 0
+    assert started == [settings]
+    assert opened == [
+        ("http://127.0.0.1:45678/dashboard/#ticket=one-time-ticket", 2)
+    ]
+    output = capsys.readouterr().out
+    assert "локальная панель" in output
+    assert "one-time-ticket" not in output

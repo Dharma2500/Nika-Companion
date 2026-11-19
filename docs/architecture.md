@@ -110,6 +110,49 @@ The formatter redacts known sensitive field names and recognizable credential
 formats. Logs are diagnostic records only; SQLite remains the source of truth
 for durable events and memory.
 
+## Conversation and memory storage (schema v2)
+
+SQLite schema v2 preserves the original event, memory, skill and world-fact data.
+It adds `conversations` and `conversation_messages` with foreign keys, ordered
+history and optional request IDs for idempotent message submission. Existing
+memory rows receive a cautious `hypothesis` provenance default; new memory
+records can explicitly distinguish `user_taught`, `observed`, `verified`,
+`inferred` and `hypothesis`, and can be scoped globally or to an opaque local
+world ID.
+
+The typed `MemoryStore` and `ConversationStore` own validation and persistence.
+Dialogue code must not issue ad-hoc SQL. Initial keyword retrieval is bounded
+and Unicode-aware; semantic embeddings are a later improvement, not a current
+capability.
+
+The provider-independent `ContextBuilder` assembles the stable Nika
+constitution, recent conversation turns and relevant memories with provenance
+and confidence labels. It enforces a hard UTF-8 byte budget. Until a freshness
+and world-scope contract is implemented, its `world_context` field is null.
+It must never present stale observations as current world state.
+
+The current nika.provider Chat Completions adapter is generic OpenAI-compatible groundwork. It is retained for the optional future LM Studio pathway, not as the primary OpenAI integration. The confirmed primary provider is the official OpenAI Responses API with primary and secondary credential slots stored by an OS-backed secret store.
+
+The authenticated `POST /bridge/v1/chat` route is implemented. It
+accepts strict schema v1 with a 16 KiB transport bound and a 4,000-character
+user-message ceiling, reuses HMAC-SHA256/timestamp/nonce protection, and uses
+request IDs for idempotency. User and assistant messages are stored in separate
+transactions; provider calls do not hold SQLite write transactions. When no
+provider is configured, the route returns a truthful error and does not pretend
+that a model response was generated.
+
+Fabric v0.5.1 intercepts ordinary outgoing chat through
+`ClientSendMessageEvents.ALLOW_CHAT` only while Nika's private chat mode is
+enabled and the local bridge advertises `dialogue.chat`. The message is
+canceled before multiplayer server send, forwarded asynchronously to the
+loopback bridge, and the reply is displayed locally. A configurable key binding
+(default N) switches back to public server chat. Slash commands use their
+separate event path and are not intercepted. If the provider is unavailable
+before send, the client blocks the ordinary message locally and shows a warning.
+The text is never sent to the server while private mode is active; the user must
+explicitly press the N toggle to switch to public server chat.
+Live Minecraft privacy and input-flow acceptance tests are still required.
+
 ## API degradation
 
 External models are optional reasoning providers, not the storage layer or the agent process itself. The provider manager will later expose explicit modes:
@@ -122,10 +165,32 @@ No component may claim that an unknown task can be solved offline without a matc
 
 ## Companion visual identity
 
-The in-game avatar for Nika is planned to use the Minecraft model/entity called
-"Тихоня". This supersedes the earlier alt-style avatar concept. The renderer
-and integration are not implemented yet; this is a recorded art-direction
-decision for the future companion model.
+The in-game avatar for Nika uses the vanilla Minecraft entity called
+"Тихоня" (Allay). This supersedes the earlier alt-style avatar concept.
+
+The v0.4.x renderer (current mod v0.5.1) creates a client-side Allay object and submits its
+vanilla render state through Fabric's world-render event and Minecraft's entity
+render dispatcher. The object is never added to ClientLevel, never synchronized
+with a server, and is not visible to other players. AI and gravity are disabled;
+the object is a visual-only representation.
+
+Summoning uses /nika and dismissal uses /nika dismiss. The local bridge performs
+an authenticated handshake automatically and retries at a bounded five-second
+interval, so manual /nika connect is only a diagnostic fallback.
+
+The follow target uses filtered horizontal player displacement, never camera
+yaw. While the player moves, Nika tracks to the right and behind the travel
+direction. When horizontal movement stops, a world-space idle anchor prevents
+her from circling the player when the camera turns. A critically damped integrator with smoothly randomized slow/fast pace phases
+smooths position changes and varies follow spacing. Body yaw and head yaw are interpolated independently;
+the head can look at the player or make occasional short glances. Small,
+infrequent idle offsets keep her gently moving near the anchor without leaving
+conversation range. The Allay instance is discarded when the player leaves the
+world or changes dimensions.
+
+No custom entity type, server registration, pathfinding, collision, item pickup,
+or world interaction is part of this renderer. The milestone remains incomplete
+until the Fabric build and live in-game rendering/follow/cleanup checks pass.
 
 ## Minecraft integration
 
@@ -167,3 +232,96 @@ after HMAC and nonce verification. Python validates the JSON before appending
 a `minecraft.observation.v1` event to the local SQLite journal. The client
 exposes this through the explicit `/nika observe` command. No automatic
 polling, chat transfer or world-changing action is enabled.
+
+
+## Local dashboard: read-only milestone
+
+The dashboard is served by the existing Python runtime over its loopback-only
+ThreadingHTTPServer. It uses the same ephemeral 127.0.0.1 port as the local
+control and Minecraft bridge endpoints. It is not a second public/LAN listener.
+
+### Browser bootstrap and session
+
+1. nika dashboard starts the runtime if needed, then the CLI reads the local
+   runtime status file and uses the runtime control token locally to request a
+   dashboard ticket.
+2. The runtime stores the random ticket in memory for 60 seconds. The CLI opens
+   /dashboard/#ticket=...; the fragment is not included in the initial HTTP
+   request.
+3. The page immediately removes the fragment from browser history and exchanges
+   the ticket with POST /dashboard/session/exchange.
+4. The runtime checks the exact local Host, same-origin Origin and
+   Sec-Fetch-Site, consumes the ticket once, and sets an opaque
+   HttpOnly; SameSite=Strict cookie scoped to /dashboard for one hour.
+5. GET /dashboard/api/status requires that in-memory session. A runtime
+   restart invalidates all dashboard sessions.
+
+The dashboard API returns only runtime state/uptime, database integrity and
+schema version, aggregate row counts, provider configured/not-configured state
+and advertised capabilities. It does not return conversation content, model
+endpoint URLs, API keys, runtime control token or bridge HMAC token.
+
+### Browser security
+
+- The server binds only to 127.0.0.1, uses an exact Host check and does not
+  enable CORS.
+- The ticket is one-time, short-lived and carried in the URL fragment, not a
+  query string. The fragment is removed immediately after the page loads.
+- The session is HttpOnly, SameSite=Strict, memory-backed and expires after
+  one hour. The page cannot read the cookie or access the runtime's local
+  status file.
+- The HTML uses a standard-base64 nonce in a strict Content Security Policy.
+  No remote JavaScript, CSS, fonts, images, CDNs, eval or browser storage are
+  used. Responses are not cached.
+- The current page is read-only. Provider settings, credentials, chat
+  history, memory mutation and runtime controls are not exposed yet.
+
+Provider URL/model configuration may be stored as local non-secret settings in
+a later milestone. API credentials are deliberately postponed and must be
+stored in an OS-backed credential store; a future browser UI may submit a
+secret once but must never read it back or put it in browser persistence.
+
+
+## Nika learning and OpenAI provider policy (authoritative decision, 2026-11-19)
+
+Nika is a memory-first companion. OpenAI is the main language/reasoning provider, not a background process and not the memory database.
+
+### Provider topology
+- Primary runtime provider: official OpenAI Responses API.
+- Credential slots: OpenAI key 1 (primary) and OpenAI key 2 (secondary failover), stored only by an OS-backed local credential store. UI status may expose configured/healthy/degraded state and a masked suffix, never the secret.
+- Provider failover is error-aware. Billing/quota exhaustion may switch immediately to key 2. Transient rate limiting gets bounded backoff and retry; network/5xx faults use bounded retry/circuit-breaker logic. Authentication failure marks the affected key unhealthy and alerts locally. Invalid request/model/permission errors must not trigger an endless retry loop.
+- Keep the existing generic OpenAI-compatible Chat Completions adapter as an optional LM Studio pathway. It is not the default provider. Keep its configuration available as an advanced alternative, but do not test or activate LM Studio in the current OpenAI integration milestone.
+- If both keys belong to one OpenAI organization, they share organization-level credits/limits. Project-specific controls can differ by project, while organization-level controls still apply. A second key only provides quota failover when its billing/limit scope actually has remaining capacity; a genuinely independent reserve generally requires another organization/billing scope.
+- Treat rate limits and exhausted credits/spending limits as different failure classes. Retrying a billing/quota error does not restore access. Never claim that two keys double the quota automatically.
+
+### Token and cost controller
+- Build a local request gate before any provider call. Memory lookup, memory writes, chat persistence, known status, deduplicated local operations and deterministic procedures must not call OpenAI.
+- Do not send every Minecraft event or background observation to a model. Persist permitted events locally, aggregate/deduplicate locally and request analysis only on an explicit user interaction or a deliberate threshold.
+- Assemble minimal context: stable reusable instructions, short recent conversation context / rolling summary, and only relevant memories. The complete SQLite transcript is never attached to every request.
+- Bound model output, reasoning effort and input context. Use a lower-cost default model for routine dialogue; allow explicit escalation for complex tasks. Do not invoke web search/tools unless requested or needed.
+- Keep stable prompt prefixes and use provider prompt caching where available. Respect per-model token accounting and pricing; report actual usage returned by the API rather than estimating from character counts alone.
+- Add local daily/monthly spend limits and a per-request token ceiling. On limit, stop paid calls gracefully while local memory and supported deterministic functions continue working.
+
+### Learning loop
+1. Persist the user/assistant conversation locally, regardless of API availability.
+2. Detect explicit learning instructions and corrections locally first.
+3. Save unambiguous user-taught facts directly; stage inferred or uncertain learning as reviewable candidates.
+4. Record procedures with prerequisites, steps, result, version/scope and known failure modes. Promote reusable skills only after confirmation or repeatable evidence.
+5. Retrieve relevant approved memory locally for future turns.
+6. Consolidate long conversations in batches only when a threshold or user action calls for it, never by polling the model continuously.
+
+This learning loop changes structured memory and skills, not model weights. It must remain useful with both API keys disabled.
+
+
+## Implemented OpenAI dual-key and local learning runtime (2026-11-19)
+
+- The primary provider is agent/src/nika/openai_provider.py using the official Responses API. Default model gpt-6-luna; reasoning effort none; store false; no tools; 320 output-token normal request cap.
+- The optional generic Chat Completions adapter in agent/src/nika/provider.py is retained for future LM Studio use. It is not the primary provider and is not tested in this milestone.
+- Primary and secondary API key slots are stored with the current Windows user's Credential Manager using agent/src/nika/credentials.py. The browser submits a native same-origin password form to the loopback runtime. Key strings are never returned to dashboard JavaScript or persisted in repository files/SQLite/logs.
+- Failover to key 2 happens on classified quota exhaustion, authentication failure or permission/access error. Transient HTTP 429 rate limiting does not burn the secondary key. Invalid request/model errors do not trigger failover. Cooldowns are bounded and visible as status only.
+- The default local context is 8 recent messages, 4 relevant memories and an 8 KiB assembled context. Runtime enforces a conservative estimated-input plus configured-output daily token ceiling (default 60,000 total tokens).
+- The Responses API usage object is stored in SQLite schema v3 provider_usage with model, key slot, input/output/cached/reasoning/total token counts. No prompt, response body or key material is stored in this table.
+- LocalLearningEngine handles explicit "запомни ..." and correction phrases as local writes to MemoryStore with user_taught provenance and confidence 1.0. Exact repeats are deduplicated. No API request is made for these operations.
+- Runtime persists every user message before checking whether a provider is available. This preserves a private learning trail if no API key is configured or both keys are unavailable. The bridge advertises dialogue.chat so explicit local memory commands can be delivered without paid API access.
+- Current automatic learning is intentionally narrow and deterministic. Uncertain candidate review UI and verified reusable skill episodes are not implemented yet.
+- Manual Windows acceptance using the actual Credential Manager and OpenAI account remains required. The CI fake endpoints do not test Vitaly's real keys or spend.
