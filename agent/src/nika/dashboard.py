@@ -410,7 +410,9 @@ def render_dashboard(nonce: str) -> bytes:
     test_ok: "OpenAI отвечает. Тестовый запрос учтён в токенах.",
     test_failed: "Проверка OpenAI не прошла. Проверь ключ, доступ к модели и квоту.",
     no_keys: "Сначала сохрани хотя бы один API-ключ.",
-    credential_store_unavailable: "Не удалось сохранить ключи. Проверь формат OpenAI API key и доступ к Windows Credential Manager."
+    credential_store_unavailable:
+      "Не удалось сохранить ключи. Проверь формат OpenAI API key и " +
+      "доступ к Windows Credential Manager."
   };
   if (notice && noticeMessages[notice]) {
     text("openai-feedback", noticeMessages[notice]);
