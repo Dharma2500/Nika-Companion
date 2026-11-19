@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from nika.backup import BackupManager
-from nika.database import Database
+from nika.database import SCHEMA_VERSION, Database
 
 
 def test_backup_is_created_and_verified(tmp_path: Path) -> None:
@@ -350,7 +350,7 @@ def test_restore_migrates_v1_backup_without_modifying_source(
     assert safety_path is not None
     assert _event_rows(database) == ["legacy-event"]
     with database.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         memory = connection.execute(
             "SELECT content, provenance_type, scope FROM memories "
             "WHERE memory_id = 'legacy-memory'"
