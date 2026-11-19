@@ -172,3 +172,12 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Python CI #423 (run 44595717972) completed all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs successfully. Later CI runs cover additional dashboard/credential fixes; check the latest completed result before packaging.
 - Fabric builds remained successful; no Java code changed, so no new JAR.
 - Latest branch remains feature/companion-renderer-v0.4.0; PR #1 stays draft/open/unmerged.
+
+
+## 2026-11-19: final successful CI and source overlay package
+
+- Final source head for this package: f325bd0b1bdaff24b124b084f59e194df7366b3b.
+- Python CI #433 (run 44596575853) passed all six Ubuntu/Windows × Python 3.11/3.12/3.13 matrix jobs. Each ran 185 passing tests. Ruff, compileall and the source-overlay archive job also passed.
+- Source overlay artifact ID 14566815689. The nested source overlay was extracted and re-verified as Nika-Companion-Update.zip. ZIP root contains repo-relative paths; .venv and NIKA_DATA are excluded. SHA-256: 2bbc04183d1899e92d2232ee1f97afabecacd759dfba5c0ad449f51cc3ee6132.
+- Fabric build #217 (run 44596575788) passed. No Java source changed, so no JAR is required.
+- PR #1 remains open/draft/unmerged. Manual Windows/OpenAI key acceptance is still required after local installation; no actual user key was used in CI.
