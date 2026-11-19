@@ -155,3 +155,20 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Important billing nuance: API credits belong to an API organization and are separate from ChatGPT subscription. Two keys in one organization do not create a second organization credit balance; project-level budgets/rate limits may differ but organization limits remain. A truly independent quota reserve generally requires a separately billed organization. Explain this without promising that two keys double token capacity.
 - No API keys have been pasted into chat or stored in the repository. Dashboard must set them locally using an OS-backed credential store; never expose keys back to page JavaScript or logs.
 - Documentation now records this decision as authoritative. Next implementation order: OpenAI Responses two-key manager and safe Windows credential store; cost gate and telemetry; then local-first memory learning/review.
+
+
+## 2026-11-19: implemented OpenAI dual-key, economy gate and local learning
+
+- Implemented official OpenAI Responses API client (agent/src/nika/openai_provider.py) as primary provider. Default model gpt-6-luna, reasoning.effort=none, store=false, tools omitted, 320 output-token cap; connection test caps output at 64 tokens.
+- Implemented two credential slots backed by Windows Credential Manager (agent/src/nika/credentials.py). Keys are entered in a same-origin native password form in dashboard and posted directly to loopback Python runtime. Keys never enter Git, provider.json, SQLite, logs or JavaScript/browser storage.
+- Failover is error-aware. Key 2 is attempted after quota exhaustion, invalid key or permissions/access issue. Transient 429 rate limits do not burn the secondary key. Invalid model/request errors and network/server errors are not treated as quota depletion.
+- Dashboard exposes primary/secondary configured flags, active slot, model, daily token usage, and a local daily ceiling (60,000 tokens default). It does not expose secret values.
+- provider_usage SQLite schema v3 records model/key slot/input/output/cached/reasoning/total counts only. New v3 migration also includes learning_candidates; existing v1/v2 schema data is preserved.
+- Context budget reduced to max 8 recent messages, 4 relevant memories and 8 KiB. Runtime applies a conservative local token estimate plus output cap before paid requests.
+- Local learning captures clear explicit "запомни ..." and explicit correction phrases, storing them as user_taught memories with confidence 1.0. Repeated exact explicit facts/corrections are deduplicated. These operations generate local replies without OpenAI. Ordinary text is saved before provider checks but not automatically promoted to memory.
+- Bridge advertises dialogue.chat without needing API keys so the client can reach the local learning gate. The private text is still local only; no code changes in the Fabric mod.
+- Generic OpenAI-compatible Chat Completions pathway and advanced LM Studio settings remain optional future configuration; we do not set up or test LM Studio in this milestone.
+- OpenAI real-account credentials and generation have not yet been tested. Windows Credential Manager still requires manual acceptance on Vitaly's PC. Review UI, automatic candidate creation/review, verified skill episodes, monthly USD budget, per-key cost estimate and emergency off switch remain future tasks.
+- Python CI #423 (run 44595717972) completed all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs successfully. Later CI runs cover additional dashboard/credential fixes; check the latest completed result before packaging.
+- Fabric builds remained successful; no Java code changed, so no new JAR.
+- Latest branch remains feature/companion-renderer-v0.4.0; PR #1 stays draft/open/unmerged.
