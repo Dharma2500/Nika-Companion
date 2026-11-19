@@ -717,6 +717,15 @@ def test_dashboard_uses_single_use_ticket_and_redacted_local_session(
             assert "nonce-" in policy
             assert "frame-ancestors 'none'" in policy
             assert "https://" not in page
+            assert 'name="primary_key" type="password"' in page
+            assert 'name="secondary_key" type="password"' in page
+            assert "gpt-6-luna" in page
+
+        notice_request = Request(f"{base_url}/dashboard/?notice=saved")
+        with urlopen(notice_request, timeout=2) as response:
+            notice_page = response.read().decode("utf-8")
+            assert response.status == 200
+            assert "Настройки сохранены" in notice_page
 
         unauthenticated = Request(f"{base_url}/dashboard/api/status")
         with pytest.raises(HTTPError) as unauthorized:
@@ -785,6 +794,11 @@ def test_dashboard_uses_single_use_ticket_and_redacted_local_session(
             "base_url": "",
             "model": "",
         }
+        assert dashboard_status["openai"]["primary_configured"] is False
+        assert dashboard_status["openai"]["secondary_configured"] is False
+        assert dashboard_status["openai"]["daily_token_limit"] == 60_000
+        assert dashboard_status["openai"]["usage"]["total_tokens"] == 0
+        assert dashboard_status["learning"]["pending_candidates"] == 0
         assert dashboard_status["counts"] == {
             "events": 0,
             "memories": 0,
