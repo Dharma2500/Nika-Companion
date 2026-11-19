@@ -91,6 +91,22 @@ class LocalLearningEngine:
                 )
                 else "user_fact"
             )
+            existing = next(
+                (
+                    memory
+                    for memory in self.memory_store.search_memories(fact, limit=50)
+                    if memory.content.casefold() == fact.casefold()
+                    and memory.provenance_type == "user_taught"
+                    and memory.category == category
+                ),
+                None,
+            )
+            if existing is not None:
+                return LearningResult(
+                    kind="already_known",
+                    reply="Это уже сохранено в моей локальной памяти. Вторую копию не создавала.",
+                    memory_id=existing.memory_id,
+                )
             memory = self.memory_store.add_memory(
                 MemoryInput(
                     category=category,
