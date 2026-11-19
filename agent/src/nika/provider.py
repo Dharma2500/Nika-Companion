@@ -9,8 +9,8 @@ import tempfile
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from http.client import HTTPException
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
