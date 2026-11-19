@@ -218,7 +218,7 @@ def test_bridge_chat_rejects_reused_request_id_with_different_message(
             assert stop_runtime(settings)
 
 
-def test_bridge_chat_requires_provider_and_does_not_store_message(
+def test_bridge_chat_persists_user_turn_when_provider_is_unavailable(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -246,8 +246,8 @@ def test_bridge_chat_requires_provider_and_does_not_store_message(
         messages = connection.execute(
             "SELECT COUNT(*) FROM conversation_messages"
         ).fetchone()[0]
-    assert count == 0
-    assert messages == 0
+    assert count == 1
+    assert messages == 1
 
 
 def test_bridge_chat_rejects_replayed_hmac_nonce(
