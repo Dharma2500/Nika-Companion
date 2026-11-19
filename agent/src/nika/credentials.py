@@ -33,6 +33,7 @@ def validate_openai_secret(secret: str) -> str:
     value = secret.strip()
     if (
         not value.startswith("sk-")
+        or not value.isascii()
         or not 20 <= len(value) <= MAX_API_KEY_CHARS
         or any(character.isspace() for character in value)
         or "\x00" in value
