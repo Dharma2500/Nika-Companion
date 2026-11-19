@@ -1038,10 +1038,6 @@ def serve(foreground: bool = False) -> None:
                     if action == "save":
                         primary_value = form.get("primary_key", [""])[0]
                         secondary_value = form.get("secondary_key", [""])[0]
-                        if primary_value:
-                            credential_store.set_secret("primary", primary_value)
-                        if secondary_value:
-                            credential_store.set_secret("secondary", secondary_value)
                         model_value = form.get("model", [openai_settings.model])[0]
                         limit_value = form.get(
                             "daily_token_limit",
@@ -1053,7 +1049,12 @@ def serve(foreground: bool = False) -> None:
                             max_output_tokens=openai_settings.max_output_tokens,
                             daily_token_limit=daily_limit,
                         )
+                        # Validate all non-secret settings before touching saved credentials.
                         save_openai_settings(openai_settings_path, updated_settings)
+                        if primary_value:
+                            credential_store.set_secret("primary", primary_value)
+                        if secondary_value:
+                            credential_store.set_secret("secondary", secondary_value)
                         openai_settings = updated_settings
                         primary_key = credential_store.get_secret("primary")
                         secondary_key = credential_store.get_secret("secondary")
