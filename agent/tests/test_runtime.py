@@ -383,7 +383,7 @@ def _sample_observation_payload() -> dict[str, object]:
     }
 
 
-def test_bridge_chat_without_provider_does_not_persist_user_message(
+def test_bridge_chat_without_provider_persists_user_message_locally(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -424,7 +424,7 @@ def test_bridge_chat_without_provider_does_not_persist_user_message(
             count = connection.execute(
                 "SELECT COUNT(*) FROM conversation_messages"
             ).fetchone()[0]
-        assert count == 0
+        assert count == 1
     finally:
         assert stop_runtime(settings)
 
@@ -630,7 +630,11 @@ def test_bridge_v1_handshake_is_authenticated_and_replay_protected(
         assert payload["protocol_version"] == 1
         assert payload["state"] == "running"
         assert payload["pid"] == status["pid"]
-        assert payload["capabilities"] == ["health.read", "observation.submit"]
+        assert payload["capabilities"] == [
+            "health.read",
+            "observation.submit",
+            "dialogue.chat",
+        ]
 
         replay = _signed_bridge_request(status, timestamp=timestamp, nonce=nonce)
         with pytest.raises(HTTPError) as error:
