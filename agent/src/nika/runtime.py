@@ -714,7 +714,9 @@ def serve(foreground: bool = False) -> None:
     # Retain the generic Chat Completions adapter as an optional LM Studio path.
     legacy_provider_manager = ProviderManager()
     try:
-        legacy_provider_manager.configure(load_provider_config())
+        legacy_provider_manager.configure(
+            load_provider_config(config_path=provider_config_path)
+        )
     except ProviderConfigurationError:
         LOGGER.error("runtime.legacy_provider_configuration_invalid")
     chat_request_lock = threading.Lock()
