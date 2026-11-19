@@ -473,13 +473,17 @@ class OpenAIProviderManager:
             raise ProviderError("Не настроен ни один ключ OpenAI.", kind="unconfigured")
 
         now = time.monotonic()
-        primary_blocked = cooldowns.get("primary", 0) > now
-        order = (
-            ["secondary", "primary"]
-            if primary_blocked and "secondary" in providers
-            else ["primary", "secondary"]
-        )
-        order = [slot for slot in order if slot in providers]
+        order = [
+            slot for slot in ("primary", "secondary")
+            if slot in providers and cooldowns.get(slot, 0) <= now
+        ]
+        if not order:
+            raise ProviderError(
+                "Оба ключа OpenAI временно отключены из-за квоты или ошибки доступа.",
+                kind="quota",
+            )
+        if order[0] == "secondary" and "primary" in providers:
+            order.append("primary")
         last_error: ProviderError | None = None
         for index, slot in enumerate(order):
             try:
@@ -525,13 +529,18 @@ class OpenAIProviderManager:
             )
         if not providers:
             raise ProviderError("Сначала сохрани хотя бы один ключ OpenAI.", kind="unconfigured")
-        primary_blocked = cooldowns.get("primary", 0) > time.monotonic()
-        order = (
-            ["secondary", "primary"]
-            if primary_blocked and "secondary" in providers
-            else ["primary", "secondary"]
-        )
-        order = [slot for slot in order if slot in providers]
+        now = time.monotonic()
+        order = [
+            slot for slot in ("primary", "secondary")
+            if slot in providers and cooldowns.get(slot, 0) <= now
+        ]
+        if not order:
+            raise ProviderError(
+                "Оба ключа OpenAI временно отключены из-за квоты или ошибки доступа.",
+                kind="quota",
+            )
+        if order[0] == "secondary" and "primary" in providers:
+            order.append("primary")
         last_error: ProviderError | None = None
         context = {
             "schema_version": 1,
