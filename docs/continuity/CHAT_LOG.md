@@ -124,3 +124,19 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Latest Python CI run #362 (44421335790) completed all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs successfully. Each job passed all 159 tests; compileall and Ruff passed. Source overlay job completes as part of Python CI.
 - The latest CI run includes the minor CLI output correction explaining that the one-time ticket is exchanged for an HttpOnly one-hour session cookie.
 - README, canonical handoff and chronological chat log refreshed with these latest workflow IDs. No new credentials or secrets have been added.
+
+
+## 2026-11-19: dashboard provider configuration and connection test
+
+- User confirmed dashboard opens and private Minecraft chat activates, but screenshot showed bridge/model unavailable. Diagnosed provider not configured: the Python runtime advertised dialogue.chat only when environment-based model configuration existed; dashboard was still read-only.
+- Added dashboard fields for OpenAI-compatible Base URL and exact Model ID, save action, and a real generation connection test.
+- Settings persist as non-secret JSON at NIKA_DATA/config/provider.json with schema version 1. API keys are not stored in that file or entered through the UI.
+- Runtime loads saved config when environment overrides are absent. ProviderManager supports thread-safe hot reconfiguration, so a successful dashboard save activates the provider without restarting the runtime.
+- Authenticated dashboard write/test routes enforce local Host, valid HttpOnly session, exact Origin, Sec-Fetch-Site, JSON content type, body limits and strict fields. Test generation is not stored in conversation history.
+- Dashboard now shows configured state, non-secret Base URL/model and updates bridge capabilities. Existing Minecraft client re-handshakes automatically; after dialogue.chat becomes available, the existing JAR should be sufficient. No Java source changed.
+- Added tests for persistence without secrets, environment override, duplicate JSON keys, provider manager connection test, and a runtime integration test that saves config and sends a real test request to a fake OpenAI-compatible server.
+- Fixed lint issues in the first CI attempts (CSS/footer line length, import ordering, unused import, test import sorting) and corrected dashboard form value restoration.
+- Python CI #370 (run 44569289812): all six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs passed; 164 tests in every job; Ruff and compileall passed. Source overlay artifact ID 14552468722.
+- Fabric build #154 (run 44569289697) succeeded; artifact ID 14554765345. No mod/JAR update is needed for provider settings.
+- Current code head: 5d2d16726f80804ed13f4e92b8c92cc8f828e99f. PR #1 remains open/draft/unmerged. The Windows/manual test against Vitaly's real LM Studio endpoint remains.
+- Next user operation after the updated source ZIP: stop runtime, unzip directly over C:\Nika-Companion, preserve .venv and NIKA_DATA, run python -m nika.cli dashboard, enter the actual Base URL and Model ID, save, test connection, then return to Minecraft and verify the no-leak private-chat behavior.
