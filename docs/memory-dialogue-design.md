@@ -80,7 +80,7 @@ A dedicated Python module (agent/src/nika/memory.py) owns structured memory acce
 - `get_recent_messages`: return recent conversation turns in chronological order.
 - `create_conversation` / `get_conversation`: manage conversation identity.
 
-Memory insertion is explicit in the first iteration. Nika must not silently convert every generated statement into durable memory. An explicit user request such as "запомни..." can be added later as a dedicated memory operation with clear confirmation.
+The current v0.5.1 foundation exposes typed memory writes but does not yet implement automatic learning. The target behavior is local-first: an explicit "запомни..." instruction and unambiguous user corrections can be persisted locally without an API call; ambiguous inferred facts become reviewable candidates. Nika must never silently promote every assistant-generated statement into durable verified memory. The full learning loop is specified below.
 
 ## Context Builder
 
@@ -115,7 +115,7 @@ If no provider is configured or the provider is unavailable, Nika must say that 
 
 ## Provider strategy
 
-The provider interface will be OpenAI-compatible and provider-independent. Local LM Studio is the first candidate, but no endpoint, model name or credentials are assumed until configured and tested on the machine running Nika. The Python Core, SQLite memory and Minecraft mod remain functional if the model endpoint is offline.
+The main provider is the official OpenAI Responses API, using two OS-stored key slots: primary key 1 and secondary failover key 2. The existing generic OpenAI-compatible Chat Completions adapter is retained as an optional future LM Studio pathway; it is not the primary provider and LM Studio is not being tested in the current milestone. The Python Core, SQLite memory and Minecraft mod remain functional if both external keys are unavailable.
 
 ## Security and capability boundary
 
@@ -167,3 +167,38 @@ Not implemented or not yet verified:
 7. [ ] Verify manually in Minecraft 1.21.11: private routing/no server leakage, N toggle, slash passthrough, provider-offline public fallback with warning, long/repeated messages and world transitions.
 
 Voice and autonomous actions are explicitly deferred until text dialogue is reliable.
+
+
+## Learning-first memory and token economy (authoritative design, 2026-11-19)
+
+The project's primary learning mechanism is local persistent memory, not continuous API calls and not continuous retraining of model weights.
+
+### What Nika learns locally
+- Keep the conversation archive in SQLite independently of provider availability.
+- Store durable user preferences, project facts, corrections, decisions, successful procedures, failed attempts and lessons learned as typed memory/skill records.
+- Preserve provenance (user_taught, observed, verified, inferred, hypothesis), confidence, timestamp, and global/world scope. Corrections supersede stale facts without erasing history.
+- An explicit "запомни ..." instruction may create a user_taught memory locally without a separate model call.
+- Deterministic local rules may identify likely learning signals such as corrections, repeated preferences, a confirmed successful fix or a failure. Ambiguous inferred facts become reviewable candidates, not unquestioned truths.
+- Where semantic extraction is genuinely needed, perform it only when a learning signal exists and preferably as a small structured sidecar in the already-required dialogue response. Do not launch a second model request just to summarize every message.
+- Give Vitaly local controls to review, edit, approve, reject and delete memories. Skill promotion requires a confirmed outcome or repeatable evidence.
+- Retrieve memory locally. Initial bounded keyword retrieval already exists; SQLite FTS and optional local embeddings may improve it later without sending memory indexes to OpenAI.
+- Keep the learning history and approved memories available if both API keys are unavailable.
+
+### What "learning" does not mean
+- Do not fine-tune or update model weights after every conversation. That would be expensive, slow, difficult to validate and unnecessary for remembering personal/project knowledge.
+- Model weights are not the source of truth. NIKA_DATA and SQLite are.
+- Do not treat every assistant-generated statement as a fact. Assistant text is not automatically verified knowledge.
+
+### API call policy
+- Never call OpenAI for background polling, idle time, Minecraft ticks, movement/block updates, memory lookup, local status, or a deterministic local operation.
+- Every ordinary user message is persisted locally first. Use a local-only path for explicit memory operations, known local facts, status and cached/deterministic results when possible.
+- Use OpenAI when a message actually needs language generation, synthesis, novel reasoning or extraction that deterministic local logic cannot provide.
+- Do not resend the whole conversation. Construct a compact request from the stable Nika constitution, a short recent tail or rolling summary, and only a few relevant approved memories.
+- Summaries are generated only at deliberate thresholds / session consolidation, not by one API request per message. Prefer local extractive consolidation where adequate.
+- Keep prompts compact and stable; cap input/output tokens per request, disable tools by default, and use a cost-efficient configured model for routine work. Escalate to a more capable model only for a task that merits it.
+- Cache safe, deterministic results locally with explicit invalidation. Never reuse stale or context-sensitive answers blindly.
+- Record token usage and estimated spend from provider response metadata. Provide per-key usage, daily/monthly budget ceilings, warning thresholds and a hard local stop. Do not assume OpenAI's dashboard soft budget blocks traffic.
+- The dashboard must clearly show when a local answer used no API, which key/model served a request, and its input/output/cached token usage, without ever revealing secret values.
+
+### Memory vs API
+The API is a temporary reasoning/generation capability. It does not own Nika's identity, history or learning. A successful API response is persisted locally; future relevant dialogue can use its compact memory without retrieving the original chat transcript or calling an API just to read it.
