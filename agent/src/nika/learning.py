@@ -1,4 +1,9 @@
-"""Small deterministic local-learning capture, independent from model APIs."""
+"""Capture explicit user-taught facts locally without calling a model.
+
+This first learning layer handles direct remember/correction instructions and
+deduplicates exact repeats. It deliberately does not infer facts from ordinary
+conversation or silently promote assistant-generated text into verified memory.
+"""
 
 from __future__ import annotations
 
