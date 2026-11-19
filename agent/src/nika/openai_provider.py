@@ -442,12 +442,22 @@ class OpenAIProviderManager:
         primary_key: str | None,
         secondary_key: str | None,
         settings: OpenAISettings,
+        *,
+        base_url: str = "https://api.openai.com/v1",
     ) -> None:
         providers: dict[str, OpenAIResponsesProvider] = {}
         if primary_key:
-            providers["primary"] = OpenAIResponsesProvider(primary_key, settings)
+            providers["primary"] = OpenAIResponsesProvider(
+                primary_key,
+                settings,
+                base_url=base_url,
+            )
         if secondary_key:
-            providers["secondary"] = OpenAIResponsesProvider(secondary_key, settings)
+            providers["secondary"] = OpenAIResponsesProvider(
+                secondary_key,
+                settings,
+                base_url=base_url,
+            )
         with self._lock:
             self._providers = providers
             self._legacy_provider = None
