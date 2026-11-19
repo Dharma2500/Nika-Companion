@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
