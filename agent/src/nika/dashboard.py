@@ -86,6 +86,8 @@ def render_dashboard(nonce: str) -> bytes:
       margin-top: 18px;
     }
     .field { display: block; color: #c9c1d1; font-size: 13px; }
+    details { border-top: 1px solid #39313f; margin-top: 18px; padding-top: 14px; }
+    summary { color: #c7b4df; cursor: pointer; font-size: 13px; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
     .feedback { min-height: 20px; margin-top: 14px; color: #a9d9bd; font-size: 13px; }
     .feedback.bad { color: #f29ca6; }
@@ -147,9 +149,9 @@ def render_dashboard(nonce: str) -> bytes:
       <div class="detail" id="schema">Схема базы данных</div>
     </article>
     <article class="card">
-      <div class="label">Модель</div>
+      <div class="label">OpenAI API</div>
       <div class="value" id="provider">Проверка…</div>
-      <div class="detail" id="provider-detail">Модель ещё не подключена.</div>
+      <div class="detail" id="provider-detail">Основной и резервный ключи.</div>
     </article>
     <article class="card">
       <div class="label">Возможности bridge</div>
@@ -157,28 +159,70 @@ def render_dashboard(nonce: str) -> bytes:
       <div class="detail">Только локальный аутентифицированный канал.</div>
     </article>
     <article class="card wide">
-      <div class="label">Подключение модели</div>
+      <div class="label">Основное подключение · OpenAI</div>
       <div class="detail">
-        Укажи OpenAI-compatible Base URL и точный Model ID. Для LM Studio включи Local Server.
-        Если модель запущена на другом компьютере, укажи его LAN-адрес вместо 127.0.0.1.
+        Ключ 1 используется первым. Ключ 2 подключается при исчерпании квоты,
+        временном ограничении или ошибке доступа основного ключа.
+        Пустое поле при сохранении оставляет ранее сохранённый ключ без изменений.
+        Секреты не возвращаются в браузер и хранятся в Windows Credential Manager.
       </div>
-      <div class="form-grid">
-        <label class="field" for="provider-base-url">
-          Base URL
-          <input id="provider-base-url" type="url" maxlength="2048"
-            placeholder="http://127.0.0.1:1234/v1" autocomplete="off" spellcheck="false">
-        </label>
-        <label class="field" for="provider-model">
-          Model ID
-          <input id="provider-model" type="text" maxlength="160"
-            placeholder="Имя модели из LM Studio" autocomplete="off" spellcheck="false">
-        </label>
-      </div>
-      <div class="actions">
-        <button id="provider-save" type="button">Сохранить настройки</button>
-        <button id="provider-test" type="button">Проверить соединение</button>
-      </div>
-      <div id="provider-feedback" class="feedback" role="status"></div>
+      <form method="post" action="/dashboard/api/openai-credentials" autocomplete="off">
+        <div class="form-grid">
+          <label class="field" for="openai-primary-key">
+            API-ключ №1 · основной
+            <input id="openai-primary-key" name="primary_key" type="password"
+              maxlength="4096" autocomplete="new-password" spellcheck="false"
+              placeholder="Вставь основной OpenAI API key">
+          </label>
+          <label class="field" for="openai-secondary-key">
+            API-ключ №2 · резервный
+            <input id="openai-secondary-key" name="secondary_key" type="password"
+              maxlength="4096" autocomplete="new-password" spellcheck="false"
+              placeholder="Вставь резервный OpenAI API key">
+          </label>
+          <label class="field" for="openai-model">
+            Модель для обычного общения
+            <input id="openai-model" name="model" type="text" maxlength="160"
+              value="gpt-4.1-mini" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field" for="openai-daily-limit">
+            Лимит токенов в сутки
+            <input id="openai-daily-limit" name="daily_token_limit" type="number"
+              min="1000" max="5000000" step="1000" value="60000">
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit" name="action" value="save">Сохранить ключи и настройки</button>
+          <button type="submit" name="action" value="test">Тест OpenAI · до 64 выходных токенов</button>
+          <button type="submit" name="action" value="clear_primary">Удалить ключ №1</button>
+          <button type="submit" name="action" value="clear_secondary">Удалить ключ №2</button>
+        </div>
+      </form>
+      <div id="openai-feedback" class="feedback" role="status"></div>
+      <div class="detail" id="openai-usage">Использование API ещё не зарегистрировано.</div>
+      <details>
+        <summary>Дополнительно: OpenAI-compatible / LM Studio (на будущее)</summary>
+        <div class="detail">
+          Альтернативный локальный провайдер сохранён в архитектуре, но сейчас не активируется
+          автоматически и не тестируется. Основной режим проекта — OpenAI API.
+        </div>
+        <div class="form-grid">
+          <label class="field" for="provider-base-url">
+            Base URL
+            <input id="provider-base-url" type="url" maxlength="2048"
+              placeholder="http://127.0.0.1:1234/v1" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field" for="provider-model">
+            Model ID
+            <input id="provider-model" type="text" maxlength="160"
+              placeholder="Имя модели" autocomplete="off" spellcheck="false">
+          </label>
+        </div>
+        <div class="actions">
+          <button id="provider-save" type="button">Сохранить альтернативный endpoint</button>
+        </div>
+        <div id="provider-feedback" class="feedback" role="status"></div>
+      </details>
     </article>
     <article class="card wide">
       <div class="label">Локальное хранилище</div>
@@ -189,8 +233,8 @@ def render_dashboard(nonce: str) -> bytes:
   <div id="error" role="status"></div>
   <footer>
     Панель доступна только через локальный адрес 127.0.0.1.
-    Настройки модели сохраняются в NIKA_DATA.
-    Секретные ключи в этой версии через панель не вводятся.
+    Ключи хранятся в Windows Credential Manager. В SQLite сохраняются только сообщения,
+    проверенные воспоминания и счётчики токенов.
   </footer>
 </main>
 <script nonce="__NONCE__">
@@ -223,20 +267,41 @@ def render_dashboard(nonce: str) -> bytes:
       dot("database-dot", data.database.healthy);
       text("schema", "Схема SQLite: v" + data.database.schema_version);
 
-      text("provider", data.provider.configured ? "Настроен" : "Не настроен");
+      const openai = data.openai;
+      text(
+        "provider",
+        openai.primary_configured || openai.secondary_configured
+          ? "OpenAI подключён"
+          : (data.provider.configured ? "Альтернативный провайдер" : "Не настроен")
+      );
       text(
         "provider-detail",
-        data.provider.configured
-          ? "Модель: " + data.provider.model + " · " + data.provider.base_url
-          : "Укажи адрес сервера и Model ID ниже, затем проверь соединение."
+        "Ключ 1: " + (openai.primary_configured ? "сохранён" : "нет") +
+        " · Ключ 2: " + (openai.secondary_configured ? "сохранён" : "нет") +
+        " · Активный: " + (openai.active_slot || "нет")
       );
+      if (document.activeElement !== byId("openai-model")) {
+        byId("openai-model").value = openai.model || "gpt-4.1-mini";
+      }
+      if (document.activeElement !== byId("openai-daily-limit")) {
+        byId("openai-daily-limit").value = openai.daily_token_limit || 60000;
+      }
+      text(
+        "openai-usage",
+        "Сегодня: " + openai.usage.total_tokens.toLocaleString("ru-RU") +
+        " / " + openai.daily_token_limit.toLocaleString("ru-RU") +
+        " токенов · запросов: " + openai.usage.requests +
+        " · вход: " + openai.usage.input_tokens +
+        " · выход: " + openai.usage.output_tokens +
+        " · кеш: " + openai.usage.cached_tokens
+      );
+      text("capabilities", data.capabilities.length ? data.capabilities.join(" · ") : "Нет");
       if (document.activeElement !== byId("provider-base-url")) {
         byId("provider-base-url").value = data.provider.base_url || "";
       }
       if (document.activeElement !== byId("provider-model")) {
         byId("provider-model").value = data.provider.model || "";
       }
-      text("capabilities", data.capabilities.length ? data.capabilities.join(" · ") : "Нет");
       const c = data.counts;
       text("counts", "События: " + c.events + " · Факты памяти: " + c.memories +
         " · Диалоги: " + c.conversations + " · Сообщения: " + c.messages);
@@ -335,6 +400,19 @@ def render_dashboard(nonce: str) -> bytes:
       byId("provider-test").disabled = false;
     }
   });
+
+  const notice = new URLSearchParams(window.location.search).get("notice");
+  const noticeMessages = {
+    saved: "Настройки сохранены. Значения ключей не отображаются.",
+    cleared: "Ключ удалён из Windows Credential Manager.",
+    test_ok: "OpenAI отвечает. Тестовый запрос учтён в токенах.",
+    test_failed: "Проверка OpenAI не прошла. Проверь ключ, доступ к модели и квоту.",
+    no_keys: "Сначала сохрани хотя бы один API-ключ.",
+    credential_store_unavailable: "Windows Credential Manager недоступен. Ключи не сохранены."
+  };
+  if (notice && noticeMessages[notice]) {
+    text("openai-feedback", noticeMessages[notice]);
+  }
 
   byId("refresh").addEventListener("click", refresh);
   bootstrap().catch((error) => {
