@@ -7,7 +7,6 @@ import math
 import os
 import tempfile
 import threading
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from http.client import HTTPException
