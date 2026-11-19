@@ -181,3 +181,11 @@ Chronological project decisions and delivery milestones. The authoritative curre
 - Source overlay artifact ID 14566815689. The nested source overlay was extracted and re-verified as Nika-Companion-Update.zip. ZIP root contains repo-relative paths; .venv and NIKA_DATA are excluded. SHA-256: 2bbc04183d1899e92d2232ee1f97afabecacd759dfba5c0ad449f51cc3ee6132.
 - Fabric build #217 (run 44596575788) passed. No Java source changed, so no JAR is required.
 - PR #1 remains open/draft/unmerged. Manual Windows/OpenAI key acceptance is still required after local installation; no actual user key was used in CI.
+
+
+## 2026-11-19: package handoff correction
+
+- Python CI #433 (run 44596575853) is the code-validation run: 185 tests passed in each of six Ubuntu/Windows × Python 3.11/3.12/3.13 jobs; Ruff and compileall passed.
+- Documentation synchronization after #433 was also checked by Python CI #437 (run 44597059597), all six jobs plus source overlay succeeded. Artifact #14566416589 contains that docs snapshot.
+- A final handoff correction is committed after #437; therefore #14566416589 is not the final user ZIP source. Build the final user ZIP from the newest successful workflow/source-overlay artifact after this correction.
+- No Java source changed. The JAR remains unchanged.
