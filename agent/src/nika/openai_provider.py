@@ -17,7 +17,7 @@ from urllib.request import Request, urlopen
 from nika import provider as compatible_provider
 from nika.credentials import validate_openai_secret
 
-DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+DEFAULT_OPENAI_MODEL = "gpt-6-luna"
 DEFAULT_DAILY_TOKEN_LIMIT = 60_000
 
 
@@ -177,6 +177,7 @@ class OpenAIResponsesProvider:
             "instructions": instructions,
             "input": input_items,
             "max_output_tokens": maximum,
+            "reasoning": {"effort": "none"},
             "store": False,
         }
         body = json.dumps(
@@ -404,7 +405,7 @@ class OpenAIProviderManager:
 
     def __init__(self) -> None:
         self._providers: dict[str, OpenAIResponsesProvider] = {}
-        self._legacy_provider: compatible_provider.LegacyProviderManager | None = None
+        self._legacy_provider: compatible_provider.ProviderManager | None = None
         self._cooldown_until: dict[str, float] = {}
         self._last_slot = "none"
         self._settings = OpenAISettings()
@@ -417,7 +418,7 @@ class OpenAIProviderManager:
 
     def configure_legacy(self, config: compatible_provider.ProviderConfig | None) -> None:
         """Retain the generic LM Studio path as an optional, explicitly configured mode."""
-        manager = compatible_provider.LegacyProviderManager()
+        manager = compatible_provider.ProviderManager()
         if config is not None:
             manager.configure(config)
         with self._lock:
