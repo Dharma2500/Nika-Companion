@@ -395,3 +395,57 @@ The recovery check also corrected conflicting handoff documentation without touc
 - Python source overlay artifact for the code head above: 14552468722. It is superseded if any newer docs or source commits are pushed; always package from the latest successful source-overlay run.
 - Manual Windows dashboard/model acceptance and real LM Studio endpoint/model verification are still outstanding.
 - Next: confirm Vitaly's actual LM Studio listener address and model ID via the dashboard's connection test; improve error diagnostics from sanitized provider status; then continue safe text dialogue and explicit memory review. API-key handling remains deferred.
+
+
+## 16. Authoritative product decision: OpenAI dual-key + memory-first learning (2026-11-19)
+
+This section supersedes earlier provider assumptions in this handoff and in the original memory/dialogue design. If older text below says LM Studio is the first/primary provider, treats memory insertion as manual-only forever, or describes the dashboard's generic Base URL/model form as the final setup, this section is authoritative.
+
+### User-confirmed decisions
+- Main provider is the OpenAI API, not a local LM Studio server.
+- Two OpenAI API credential slots are required:
+  - Key 1: primary.
+  - Key 2: automatic secondary failover when the primary's usable quota/availability is exhausted.
+- The dashboard must allow both keys to be entered/updated without ever displaying them again. Store secrets using an OS-backed local credential manager, not provider.json, SQLite, Git, logs or browser storage.
+- Keep the current generic OpenAI-compatible provider as an optional future LM Studio pathway. Do not remove it, but do not test or activate LM Studio for this milestone.
+- Nika must learn and remember locally. API calls are an occasional reasoning/generation resource, not a continuous dependency. Durable memory must keep working when both keys are unavailable.
+- Do not fine-tune model weights for every conversation. Learning is structured local memory, knowledge, corrections and reusable skills.
+
+### Required OpenAI integration
+- Use the official OpenAI Responses API for the primary OpenAI adapter. The current code's generic /chat/completions adapter is an optional LM Studio-compatible adapter, not the final primary OpenAI integration. The Assistants API is not an option for new work; OpenAI documents it as sunset on 2026-08-26.
+- Implement error-aware failover with bounded retries, cooldown/circuit breaker and clear local status. Quota exhaustion, rate limiting, invalid credentials, invalid model/permissions, malformed requests and service/network failures must be distinguished.
+- Quota exhaustion errors should fail over to key 2 only when it can actually use an independent remaining quota. A key is a credential, not a bucket of tokens: API credits are associated with an organization; organization and project spend/rate limits can both apply. Two keys in the same organization do not double organization quota. Different projects can have distinct project limits but still share organization-level controls. Truly independent reserve generally means a separately billed organization. Explain this honestly in dashboard help text.
+- Record usage from the Responses API response metadata: input, output, cached and (when exposed) reasoning tokens, model and selected key slot. Never record prompts, replies or actual credentials in operational usage logs.
+
+### Required token economy
+- Local request gate before any paid request.
+- No API calls for memory reads/writes, local status, background idle loops, Minecraft ticks, movement/block updates or routine event ingestion.
+- Save every private conversation locally. Use approved memories and a compact recent tail/summary; never resend the complete chat history each time.
+- Explicit "запомни" actions and straightforward facts/corrections should be saved locally without a separate model call. Uncertain inferences go into a pending candidate queue; show review/approve/edit/reject controls.
+- Trigger model-assisted learning extraction only for meaningful learning signals, preferably within the ordinary response rather than a second API request.
+- Store successful/failed problem-solving episodes and reusable skills with provenance, scope, prerequisites, steps, result and confidence. Do not claim a skill is verified merely because the model suggested it.
+- Use compact stable instructions, strict input/output token ceilings, low-cost routine model routing and deliberate escalation only when needed. Prompt caching may reduce repeated-prefix input cost where supported; do not assume it replaces trimming.
+- Local daily/monthly usage ceilings, per-request caps, visible alerts and an emergency disable switch are required.
+
+### Current code status after previous incorrect provider assumption
+- The most recent source milestone added a generic OpenAI-compatible endpoint/model editor and a test-generation button to the dashboard. This is still present in the feature branch and has passed CI, but it does not implement the confirmed two-key OpenAI design.
+- Do not ask Vitaly to configure a LAN LM Studio server, do not instruct him to test LM Studio, and do not present the prior Nika-Companion-Update.zip as the correct dual-key installation.
+- Keep LM Studio pathway optional, behind an advanced provider selection/config section. The OpenAI primary/secondary route must be the default.
+- No user has supplied actual API keys in chat. Never ask him to paste keys into the conversation. Keys are entered only into the local dashboard's protected fields.
+- Repository remains Dharma2500/Nika-Companion, branch feature/companion-renderer-v0.4.0, PR #1 open/draft/unmerged. Do not merge without explicit approval.
+
+### Next development sequence
+1. Keep canonical docs/roadmap/README and PR description aligned with this decision across future chats.
+2. Refactor provider management into a multi-credential OpenAI Responses provider with error classification, failover and telemetry; preserve the existing LM Studio-compatible adapter as optional but untested.
+3. Add Windows OS credential-store adapter plus a testable fake backend; build dashboard key-entry/update/delete controls and redacted status.
+4. Add request gate, token/cost accounting, hard local caps and user-configurable economy settings before increasing API traffic.
+5. Evolve memory from manual-only insertion to local-first learning candidates, review controls, automatic capture of explicit memory instructions, and verified reusable skill episodes. Keep API-assisted extraction sparse and batched/in-band only on learning signals.
+6. Test with fake OpenAI Responses endpoints and simulated quota/rate/auth/server failures. Only after those pass should Vitaly enter his own keys and conduct a real minimal-cost API test.
+7. Keep the Minecraft JAR unchanged unless the bridge protocol or client behavior actually changes.
+
+### Source references checked for this decision
+- OpenAI Assistants API sunset and Responses API migration: https://platform.openai.com/playground/assistants
+- OpenAI API credits are separate from ChatGPT subscription and associated with an API organization: https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform
+- Organization/project usage, quota and spend-limit errors: https://help.openai.com/en/articles/6614457-troubleshooting-api-usage-and-spend-limits
+- Project keys, project-level budgets and rate limits: https://help.openai.com/en/articles/9186755-managing-projects-in-the-api-platform
+- Rate-limit errors vs billing/quota errors: https://help.openai.com/en/articles/5955604-troubleshooting-api-rate-limits-and-429-errors
