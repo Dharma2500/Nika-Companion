@@ -852,24 +852,47 @@ def serve(foreground: bool = False) -> None:
                             "schema_version": SCHEMA_VERSION,
                         },
                         "provider": {
-                            "configured": provider_manager.is_available,
+                            "configured": (
+                                openai_manager.is_available
+                                or legacy_provider_manager.is_available
+                            ),
                             "base_url": (
-                                provider_manager.config.base_url
-                                if provider_manager.config is not None
+                                legacy_provider_manager.config.base_url
+                                if legacy_provider_manager.config is not None
+                                and not openai_manager.is_available
                                 else ""
                             ),
                             "model": (
-                                provider_manager.config.model
-                                if provider_manager.config is not None
-                                else ""
+                                openai_settings.model
+                                if openai_manager.is_available
+                                else (
+                                    legacy_provider_manager.config.model
+                                    if legacy_provider_manager.config is not None
+                                    else openai_settings.model
+                                )
                             ),
+                        },
+                        "openai": {
+                            **openai_manager.status(),
+                            "daily_token_limit": openai_settings.daily_token_limit,
+                            "usage": {
+                                "input_tokens": usage_store.daily_totals().input_tokens,
+                                "output_tokens": usage_store.daily_totals().output_tokens,
+                                "cached_tokens": usage_store.daily_totals().cached_tokens,
+                                "reasoning_tokens": usage_store.daily_totals().reasoning_tokens,
+                                "total_tokens": usage_store.daily_totals().total_tokens,
+                                "requests": usage_store.daily_totals().requests,
+                            },
+                        },
+                        "learning": {
+                            "pending_candidates": learning_store.pending_count(),
                         },
                         "capabilities": [
                             "health.read",
                             "observation.submit",
                             *(
                                 ["dialogue.chat"]
-                                if provider_manager.is_available
+                                if (openai_manager.is_available or legacy_provider_manager.is_available)
                                 else []
                             ),
                         ],
@@ -927,7 +950,7 @@ def serve(foreground: bool = False) -> None:
                         "observation.submit",
                         *(
                             ["dialogue.chat"]
-                            if provider_manager.is_available
+                            if (openai_manager.is_available or legacy_provider_manager.is_available)
                             else []
                         ),
                     ],
